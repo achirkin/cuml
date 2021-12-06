@@ -295,7 +295,10 @@ __global__ void __launch_bounds__(1024, 1) AggregateXw_kernel(const T* X,
                                                               const int workOffset,
                                                               const int workCount,
                                                               T* xwPartial,
-                                                              const int xwPartialWidth)
+                                                              const int xwPartialWidth,
+                                                              const T* alpha,
+                                                              const T* cWeighted,
+                                                              const T* gHist)
 {
   extern __shared__ __align__(16) unsigned char shm_bytes[];
   const unsigned int mask = 0xFFFFFFFFU;
@@ -306,6 +309,7 @@ __global__ void __launch_bounds__(1024, 1) AggregateXw_kernel(const T* X,
   const int ywidth        = min(warpSize, 1 << ypow);
   int shmOff              = 0;
   T xw[workRatio];
+  T gQg = 0;
 
   const unsigned int threadId = threadIdx.x + threadIdx.y * blockDim.x;
   const dim3 transIdx(threadId & ((1 << ypow) - 1), threadId >> ypow, 1);
@@ -339,8 +343,10 @@ __global__ void __launch_bounds__(1024, 1) AggregateXw_kernel(const T* X,
     t    = shm[shmOff + ti];
     T xl = __shfl_sync(mask, t, l, ywidth);
     xw[0] += xl * __shfl_sync(mask, t, k0, ywidth);
+    gQg +=
 #pragma unroll
-    for (unsigned int k = k1, r = 1; r < workRatio; r++) {
+      for (unsigned int k = k1, r = 1; r < workRatio; r++)
+    {
       xw[r] += xl * __shfl_sync(mask, t, k, ywidth);
       if (++k == workCount) k = 0;
     }
@@ -356,61 +362,6 @@ __global__ void __launch_bounds__(1024, 1) AggregateXw_kernel(const T* X,
     if (threadIdx.x == 0) xwPartial[xwPartialWidth * (r + (threadIdx.y << R)) + blockIdx.x] = t;
   }
 }
-
-// template <typename T, bool WithBias, int S>
-// __global__ void __launch_bounds__(1024, 1) AggregateXw_kernel0(const T* X,
-//                                                                const T* w,
-//                                                                const int* indices,
-//                                                                const int nRows,
-//                                                                const int nCols,
-//                                                                const int workOffset,
-//                                                                const int workCount,
-//                                                                T* xwPartial,
-//                                                                const int xwPartialWidth)
-// {
-//   extern __shared__ __align__(16) unsigned char shm_bytes[];
-//   const unsigned int mask = 0xFFFFFFFFU;
-//   T* shm                  = reinterpret_cast<T*>(shm_bytes);
-//   const int shmSize       = blockDim.x * blockDim.y;
-//   const int ypow          = 2 * S - 1;  // blockDim.y = 2 ^ ypow
-//   int shmOff              = 0;
-//   T xw                    = 0;
-
-//   const unsigned int threadId = threadIdx.x + threadIdx.y * blockDim.x;
-//   const dim3 transIdx(threadId & ((1 << ypow) - 1), threadId >> ypow, 1);
-//   const int i = threadIdx.y < workCount ? indices[workOffset + threadIdx.y] : -1;
-
-//   unsigned int l = transIdx.x >> (S - 1);
-//   unsigned int k = l + (transIdx.x & ((1 << (S - 1)) - 1));
-//   if (k >= workCount)
-//     k -= workCount;
-//   else if (k == l)
-//     k = workCount;
-//   l               = transIdx.y + blockDim.x * l;
-//   k               = transIdx.y + blockDim.x * k;
-//   const int jstep = gridDim.x * blockDim.x;
-
-//   for (int j = blockIdx.x * blockDim.x + threadIdx.x; j < nCols + threadIdx.x;
-//        j += jstep, shmOff ^= shmSize) {
-//     T t = 0;
-//     if (j < nCols) {
-//       if (threadIdx.y < workCount)
-//         t = getX<T, WithBias>(X, i, j, nRows, nCols);
-//       else if (threadIdx.y == workCount)
-//         t = w[j];
-//     }
-//     shm[shmOff + threadId] = t;
-//     __syncthreads();
-//     xw += shm[shmOff + k] * shm[shmOff + l];
-//   }
-
-//   shm[shmOff + transIdx.x + (transIdx.y << ypow)] = xw;
-//   __syncthreads();
-//   xw = shm[shmOff + threadIdx.y + (threadIdx.x << ypow)];
-//   for (int offset = blockDim.x >> 1; offset > 0; offset >>= 1)
-//     xw += __shfl_down_sync(mask, xw, offset);
-//   if (threadIdx.x == 0) xwPartial[xwPartialWidth * threadIdx.y + blockIdx.x] = xw;
-// }
 
 /**
  * Fills xwPartial with partial dot product of X and w.
@@ -573,7 +524,9 @@ __global__ void __launch_bounds__(BlockLen) CalculateGradAndQ_kernel(const T* xw
                                                                      const int workCount,
                                                                      const int s,
                                                                      T* Q,
-                                                                     T* g)
+                                                                     T* g,
+                                                                     T* gh,
+                                                                     T gfrac)
 {
   __shared__ typename cub::BlockReduce<T, BlockLen>::TempStorage shm;
   const int l = blockIdx.x >> (s - 1);
@@ -594,10 +547,12 @@ __global__ void __launch_bounds__(BlockLen) CalculateGradAndQ_kernel(const T* xw
     T yi  = y[i];
     if (l == k) {
       Q[(l << s) + l]     = Qii[i];
-      g[l]                = r * yi - 1;
+      T gi                = r * yi - 1;
+      g[l]                = gi;
       g[(1 << s) + l]     = yi;
       g[(1 << s) * 2 + l] = cWeighted[i];
       g[(1 << s) * 3 + l] = alpha[i];
+      gh[i]               = gh[i] * (T(1.0) - gfrac) + gi * gfrac;
     } else {
       int j           = indices[workOffset + k];
       t               = r * yi * y[j];
@@ -606,54 +561,6 @@ __global__ void __launch_bounds__(BlockLen) CalculateGradAndQ_kernel(const T* xw
     }
   }
 }
-
-// template <typename T, int BlockMult>
-// __global__ void __launch_bounds__(32) CalculateGradAndQ_kernel32(const T* xwPartial,
-//                                                                  const T* y,
-//                                                                  const T* Qii,
-//                                                                  const T* cWeighted,
-//                                                                  const T* alpha,
-//                                                                  const int* indices,
-//                                                                  const int workOffset,
-//                                                                  const int workCount,
-//                                                                  const int s,
-//                                                                  T* Q,
-//                                                                  T* g)
-// {
-//   const unsigned int mask = 0xFFFFFFFFU;
-//   const int l             = blockIdx.x >> (s - 1);
-//   int k                   = blockIdx.x & ((1 << (s - 1)) - 1);
-//   if (l >= workCount || (k + l >= workCount && k >= l)) return;
-//   k += l;
-//   if (k >= workCount) k -= workCount;
-
-//   T t = 0;
-// #pragma unroll
-//   for (int i = 0; i < BlockMult; i++)
-//     t += xwPartial[((BlockMult * blockIdx.x + i) << 5) + threadIdx.x];
-//   t += __shfl_down_sync(mask, t, 16);
-//   t += __shfl_down_sync(mask, t, 8);
-//   t += __shfl_down_sync(mask, t, 4);
-//   t += __shfl_down_sync(mask, t, 2);
-//   t += __shfl_down_sync(mask, t, 1);
-
-//   if (threadIdx.x == 0) {
-//     int i = indices[workOffset + l];
-//     T yi  = y[i];
-//     if (l == k) {
-//       Q[(l << s) + l]     = Qii[i];
-//       g[l]                = t * yi - 1;
-//       g[(1 << s) + l]     = yi;
-//       g[(1 << s) * 2 + l] = cWeighted[i];
-//       g[(1 << s) * 3 + l] = alpha[i];
-//     } else {
-//       int j = indices[workOffset + k];
-//       t *= yi * y[j];
-//       Q[(l << s) + k] = t;
-//       Q[(k << s) + l] = t;
-//     }
-//   }
-// }
 
 template <typename T>
 class CalculateGradAndQ {
@@ -669,7 +576,7 @@ class CalculateGradAndQ {
   // position of the `workCount` argument in `CalculateGradAndQ_kernel`.
   const int workCountArgIdx = 7;
   const int sArgIdx         = 8;
-  void* kernelArgs[11];
+  void* kernelArgs[13];
 
   struct KernelAndSize {
     const void* kernel;
@@ -681,9 +588,6 @@ class CalculateGradAndQ {
   struct SelectKernel {
     static inline KernelAndSize run(const DeviceInfo& ctx)
     {
-      //   if (XwLen == 32) return KernelAndSize{(void*)(CalculateGradAndQ_kernel32<T, 1>), 32, 1};
-      //   if (XwLen == 64) return KernelAndSize{(void*)(CalculateGradAndQ_kernel32<T, 2>), 32, 2};
-      //   if (XwLen == 96) return KernelAndSize{(void*)(CalculateGradAndQ_kernel32<T, 3>), 32, 3};
       if (XwLen % (ctx.warpSize * 3) == 0)
         return KernelAndSize{(void*)(CalculateGradAndQ_kernel<T, XwLen / 3, 3>), XwLen / 3, 3};
       if (XwLen % (ctx.warpSize * 2) == 0)
@@ -1105,6 +1009,7 @@ int linearSVM_solve_run(const T* X,
 
   rmm::device_uvector<CdState<T>> stateBuf(1, stream);
   rmm::device_uvector<int> indicesBuf(nRows * 2, stream);
+  rmm::device_uvector<T> gHistBuf(nRows, stream);
   rmm::device_uvector<T> xwPartialBuf(calculateGradAndQ.xwLen << (2 * aggregateXw.s - 1), stream);
   rmm::device_uvector<bool> shrinkStencilBuf(nRows, stream);
   rmm::device_uvector<T> dwBuf(1 << (aggregateXw.s + 2), stream);
@@ -1116,6 +1021,7 @@ int linearSVM_solve_run(const T* X,
   auto shrinkStencil = shrinkStencilBuf.data();
   auto dw            = dwBuf.data();
   auto Q             = QBuf.data();
+  auto gHist         = gHistBuf.data();
 
   CUDA_CHECK(
     cudaMemsetAsync(Q, 0, aggregateXw.maxWorkCount * aggregateXw.maxWorkCount * sizeof(T), stream));
@@ -1164,15 +1070,30 @@ int linearSVM_solve_run(const T* X,
   // stream));
   // // ----------------
 
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+
   int workOffset, workCount;
+  T gFrac = 1.0;
   aggregateXw.setupArgs(
     X, w, indicesA, nRows, nCols, workOffset, workCount, xwPartial, calculateGradAndQ.xwLen);
-  calculateGradAndQ.setupArgs(
-    xwPartial, y, Qii, cWeighted, alpha, indicesA, workOffset, workCount, aggregateXw.s, Q, dw);
+  calculateGradAndQ.setupArgs(xwPartial,
+                              y,
+                              Qii,
+                              cWeighted,
+                              alpha,
+                              indicesA,
+                              workOffset,
+                              workCount,
+                              aggregateXw.s,
+                              Q,
+                              dw,
+                              gHist,
+                              gFrac);
   calculateDw.setupArgs(indicesA, Q, dw, workOffset, workCount, state, alpha, shrinkStencil, dw);
 
   for (; itersPassed < maxIter; itersPassed++) {
     ML::PUSH_RANGE("Trace::LinearSVM::solve::outer_iteration");
+    gFrac           = T(1.0) - T(0.8) * T(itersPassed) / (10 + T(itersPassed));
     stateHost.pGMax = -std::numeric_limits<T>::infinity();
     stateHost.pGMin = std::numeric_limits<T>::infinity();
     CUDA_CHECK(
@@ -1412,6 +1333,7 @@ void linearSVM_solve_mbbias(const raft::handle_t& handle,
 
   int maxIter = params.max_iter;
   if (maxIter < 0) maxIter = 1000;
+  CUDA_CHECK(cudaStreamSynchronize(stream));
 
   auto itersPassed = linearSVM_solve_run<T, WithBias>(X,
                                                       y,
