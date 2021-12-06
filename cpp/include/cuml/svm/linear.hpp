@@ -76,6 +76,8 @@ struct LinearSVMParams {
   double change_tol = 0.00001;
   /** The epsilon-sensitivity parameter (applicable to the SVM-regression (SVR) loss functions). */
   double epsilon = 0.0;
+  /** Whether to solve in dual (coordinate descent). */
+  bool dual = false;
 };
 
 template <typename T>

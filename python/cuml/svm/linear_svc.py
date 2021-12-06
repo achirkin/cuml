@@ -187,4 +187,5 @@ class LinearSVC(LinearSVM, ClassifierMixin):
             'grad_tol',
             'change_tol',
             'multi_class',
+            'dual',
         }.union(super().get_param_names()))

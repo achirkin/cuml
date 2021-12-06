@@ -64,6 +64,7 @@ cdef extern from "cuml/svm/linear.hpp" namespace "ML::SVM":
         double grad_tol
         double change_tol
         double epsilon
+        cppbool dual
 
     cdef cppclass LinearSVMModel[T]:
         const handle_t& handle

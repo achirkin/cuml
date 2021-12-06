@@ -43,6 +43,7 @@
 #include <glm/qn/qn.cuh>
 
 #include <cuml/svm/linear.hpp>
+#include "linear_cd.cuh"
 
 namespace ML {
 namespace SVM {
@@ -372,6 +373,11 @@ LinearSVMModel<T> LinearSVMModel<T>::fit(const raft::handle_t& handle,
   // from now on, nClasses == 0 implies we solve the regression problem.
   auto model = LinearSVMModel<T>::allocate(handle, params, nCols, nClasses);
   if (model.classes != nullptr) raft::copy(model.classes, classesBuf.data(), nClasses, stream);
+
+  if (params.dual) {
+    linearSVC_CD_fit(handle, params, X, nRows, nCols, y, sampleWeight, model, stream);
+    return model;
+  }
 
   const int coefCols         = narrowDown(model.coefCols());
   const std::size_t coefRows = model.coefRows;
