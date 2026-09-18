@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import cupy as cp
@@ -101,8 +101,7 @@ class KNeighborsClassifier(ClassifierMixin, FMajorInputTagMixin, NeighborsBase):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -204,7 +203,7 @@ class KNeighborsClassifier(ClassifierMixin, FMajorInputTagMixin, NeighborsBase):
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y, *, convert_dtype="deprecated") -> "KNeighborsClassifier":
+    def fit(self, X, y) -> "KNeighborsClassifier":
         """
         Fit a GPU index for k-nearest neighbors classifier model.
 
@@ -214,11 +213,10 @@ class KNeighborsClassifier(ClassifierMixin, FMajorInputTagMixin, NeighborsBase):
                 f"weights must be 'uniform', 'distance', or a callable, got {self.weights}"
             )
 
-        super().fit(X, convert_dtype=convert_dtype)
+        super().fit(X)
         y, classes = check_y(
             y,
             dtype="int32",
-            convert_dtype=convert_dtype,
             order="F",
             accept_multi_output=True,
             return_classes=True,
@@ -238,16 +236,14 @@ class KNeighborsClassifier(ClassifierMixin, FMajorInputTagMixin, NeighborsBase):
                                        'description': 'Labels predicted',
                                        'shape': '(n_samples, 1)'})
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """
         Use the trained k-nearest neighbors classifier to
         predict the labels for X
 
         """
         # Get KNN results - always get distances to compute weights
-        distances, indices = self.kneighbors(
-            X, return_distance=True, convert_dtype=convert_dtype
-        )
+        distances, indices = self.kneighbors(X, return_distance=True)
         indices = cp.ascontiguousarray(indices, dtype=cp.int64)
         cdef size_t n_rows = indices.shape[0]
 
@@ -295,16 +291,14 @@ class KNeighborsClassifier(ClassifierMixin, FMajorInputTagMixin, NeighborsBase):
                                        'description': 'Labels probabilities',
                                        'shape': '(n_samples, 1)'})
     @mlfunc(preserve_index=True)
-    def predict_proba(self, X, *, convert_dtype="deprecated"):
+    def predict_proba(self, X):
         """
         Use the trained k-nearest neighbors classifier to
         predict the label probabilities for X
 
         """
         # Get KNN results - always get distances to compute weights
-        distances, indices = self.kneighbors(
-            X, return_distance=True, convert_dtype=convert_dtype
-        )
+        distances, indices = self.kneighbors(X, return_distance=True)
         indices = cp.ascontiguousarray(indices, dtype=cp.int64)
         cdef size_t n_rows = indices.shape[0]
 

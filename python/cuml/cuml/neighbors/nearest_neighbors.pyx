@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import warnings
@@ -192,6 +192,7 @@ void swap_kernel(long long int* I, float* D, int n_rows, int n_cols) {
 
 def _drop_self_edges(distances, indices):
     """Drop edges between a point and itself in the knn graph"""
+    indices = cp.ascontiguousarray(indices, dtype=cp.int64)
     rows, cols = indices.shape
 
     # Launch config
@@ -602,7 +603,7 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
 
     @generate_docstring(X='dense_sparse')
     @mlfunc(set_input_type=True)
-    def fit(self, X, y=None, *, convert_dtype="deprecated") -> "NearestNeighbors":
+    def fit(self, X, y=None) -> "NearestNeighbors":
         """
         Fit GPU index for performing nearest neighbor queries.
 
@@ -617,7 +618,6 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
             X,
             dtype="float32",
             accept_sparse=["csr"],
-            convert_dtype=convert_dtype,
             order="C",
             reset=True,
         )
@@ -693,7 +693,6 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
         n_neighbors=None,
         return_distance=True,
         *,
-        convert_dtype="deprecated",
         two_pass_precision=False
     ):
         """
@@ -709,13 +708,6 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
 
         return_distance: Boolean
             If False, distances will not be returned
-
-        convert_dtype : bool, default="deprecated"
-            .. deprecated:: 26.08
-                `convert_dtype` was deprecated in version 26.08 and will be
-                removed in version 26.10. cuML only copies input arrays when
-                necessary (e.g. to unify dtypes), there is no reason to provide
-                this keyword going forward.
 
         two_pass_precision : bool, optional (default = False)
             When set to True, a slow second pass will be used to improve the
@@ -765,7 +757,7 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
             distances, indices = self._kneighbors_sparse(X, n_neighbors)
         else:
             distances, indices = self._kneighbors_dense(
-                X, n_neighbors, convert_dtype, two_pass_precision
+                X, n_neighbors, two_pass_precision
             )
 
         if use_training_data:
@@ -773,9 +765,7 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
 
         return (distances, indices) if return_distance else indices
 
-    def _kneighbors_dense(
-        self, X, int n_neighbors, convert_dtype="deprecated", two_pass_precision=False
-    ):
+    def _kneighbors_dense(self, X, int n_neighbors, two_pass_precision=False):
         if is_sparse(X):
             raise ValueError("A NearestNeighbors model trained on dense "
                              "data requires dense input to kneighbors()")
@@ -783,7 +773,6 @@ class NeighborsBase(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base
         X = check_array(
             X,
             dtype="float32",
-            convert_dtype=convert_dtype,
             order="C",
             input_name="X",
         )
@@ -1071,8 +1060,7 @@ class NearestNeighbors(NeighborsBase):
         Additional keyword arguments for the metric function.
     n_jobs : int (default = None)
         Ignored, here for scikit-learn API compatibility.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -1120,7 +1108,7 @@ class NearestNeighbors(NeighborsBase):
     Notes
     -----
     For an additional example see `the NearestNeighbors notebook
-    <https://github.com/rapidsai/cuml/blob/main/notebooks/nearest_neighbors_demo.ipynb>`_.
+    <https://github.com/NVIDIA/cuml/blob/main/notebooks/nearest_neighbors_demo.ipynb>`_.
 
     For additional docs, see `scikit-learn's NearestNeighbors
     <https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.NearestNeighbors.html#sklearn.neighbors.NearestNeighbors>`_.

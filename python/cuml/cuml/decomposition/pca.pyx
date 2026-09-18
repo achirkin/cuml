@@ -5,6 +5,7 @@
 import cupy as cp
 import cupyx.scipy.sparse
 import numpy as np
+from sklearn.base import ClassNamePrefixFeaturesOutMixin
 
 from cuml.common.doc_utils import generate_docstring
 from cuml.common.sparse import is_sparse, sparse_cov_and_mean
@@ -83,6 +84,7 @@ cdef extern from "cuml/decomposition/pca.hpp" namespace "ML" nogil:
 class PCA(InteropMixin,
           FMajorInputTagMixin,
           SparseInputTagMixin,
+          ClassNamePrefixFeaturesOutMixin,
           Base):
 
     """
@@ -186,8 +188,7 @@ class PCA(InteropMixin,
         Whitening allows each component to have unit variance and removes
         multi-collinearity. It might be beneficial for downstream
         tasks like LinearRegression where correlated features cause problems.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -334,6 +335,7 @@ class PCA(InteropMixin,
         self.whiten = whiten
 
     @property
+    @mlfunc(convert_output=False)
     def _n_features_out(self):
         """Number of transformed output features."""
         # Exposed to support sklearn's `get_feature_names_out`
@@ -460,7 +462,7 @@ class PCA(InteropMixin,
 
     @generate_docstring(X='dense_sparse')
     @mlfunc(set_input_type=True)
-    def fit(self, X, y=None, *, convert_dtype="deprecated") -> "PCA":
+    def fit(self, X, y=None) -> "PCA":
         """
         Fit the model with X. y is currently ignored.
 
@@ -471,7 +473,6 @@ class PCA(InteropMixin,
             accept_sparse=["csr"],
             accept_large_sparse=True,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             ensure_min_samples=2,
             ensure_min_features=2,
             order="F",
@@ -502,7 +503,11 @@ class PCA(InteropMixin,
                                        'type': 'dense_sparse',
                                        'description': 'Transformed values',
                                        'shape': '(n_samples, n_components)'})
-    @mlfunc(set_input_type=True, preserve_index=True)
+    @mlfunc(
+        set_input_type=True,
+        preserve_index=True,
+        column_names="feature_names_out",
+    )
     def fit_transform(self, X, y=None):
         """
         Fit the model with X and apply the dimensionality reduction on X.
@@ -571,12 +576,11 @@ class PCA(InteropMixin,
                                        'type': 'dense_sparse',
                                        'description': 'Transformed values',
                                        'shape': '(n_samples, n_features)'})
-    @mlfunc(preserve_index=True)
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(
         self,
         X,
         *,
-        convert_dtype="deprecated",
         return_sparse=False,
         sparse_tol=1e-10,
     ):
@@ -591,7 +595,6 @@ class PCA(InteropMixin,
             X,
             accept_sparse=True,
             dtype=self.components_.dtype,
-            convert_dtype=convert_dtype,
             order="F",
         )
         if X.shape[1] != self.n_components_:
@@ -665,8 +668,8 @@ class PCA(InteropMixin,
                                        'type': 'dense_sparse',
                                        'description': 'Transformed values',
                                        'shape': '(n_samples, n_components)'})
-    @mlfunc(preserve_index=True)
-    def transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def transform(self, X):
         """
         Apply dimensionality reduction to X.
 
@@ -681,7 +684,6 @@ class PCA(InteropMixin,
             X,
             accept_sparse=True,
             dtype=self.components_.dtype,
-            convert_dtype=convert_dtype,
             order="F",
         )
         if is_sparse(X):

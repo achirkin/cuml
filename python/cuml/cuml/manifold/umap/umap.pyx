@@ -12,6 +12,7 @@ import joblib
 import numpy as np
 import scipy.sparse
 import scipy.spatial
+from sklearn.base import ClassNamePrefixFeaturesOutMixin
 
 from cuml.common.doc_utils import generate_docstring
 from cuml.common.sparse import is_sparse
@@ -311,9 +312,10 @@ cdef class RaftCOO:
 
         cdef RaftCOO self = RaftCOO.__new__(RaftCOO)
         cdef handle_t* handle_ = <handle_t*><size_t>handle.getHandle()
-        cdef lib.COO* coo = new lib.COO(handle_.get_stream())
+        cdef cudaStream_t stream = handle_.get_stream().get()
+        cdef lib.COO* coo = new lib.COO(stream)
         self.ptr.reset(coo)
-        coo.allocate(arr.nnz, arr.shape[0], False, handle_.get_stream())
+        coo.allocate(arr.nnz, arr.shape[0], False, stream)
         handle_.sync_stream()
 
         copy_from_cupy(<uintptr_t>coo.vals(), arr.data, np.float32)
@@ -500,7 +502,7 @@ cdef init_params(self, lib.UMAPParams &params, n_rows, is_sparse=False, is_fit=T
             # TODO: for now, users should be able to see the same results
             # as previous version (i.e. running brute force knn) when they
             # explicitly pass random_state
-            # https://github.com/rapidsai/cuml/issues/5985
+            # https://github.com/NVIDIA/cuml/issues/5985
             build_algo ="brute_force_knn"
         elif n_rows <= 50_000 or is_sparse:
             # brute force is faster for small datasets
@@ -515,7 +517,7 @@ cdef init_params(self, lib.UMAPParams &params, n_rows, is_sparse=False, is_fit=T
         )
 
     if build_algo == "nn_descent" and n_rows < 150:
-        # https://github.com/rapidsai/cuvs/issues/184
+        # https://github.com/NVIDIA/cuvs/issues/184
         warnings.warn(
             "using build_algo='nn_descent' on a small dataset (< 150 samples) "
             "is unstable"
@@ -655,7 +657,13 @@ cdef init_params(self, lib.UMAPParams &params, n_rows, is_sparse=False, is_fit=T
         params.build_params.nnd.intermediate_graph_degree = intermediate_graph_degree
 
 
-class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
+class UMAP(
+    InteropMixin,
+    CMajorInputTagMixin,
+    SparseInputTagMixin,
+    ClassNamePrefixFeaturesOutMixin,
+    Base,
+):
     """Uniform Manifold Approximation and Projection
 
     Finds a low dimensional embedding of the data that approximates
@@ -844,8 +852,7 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -1105,6 +1112,7 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             "_disconnection_distance": disconnection_distance,
             "_initial_alpha": self.learning_rate,
             "_n_neighbors": self._n_neighbors,
+            "_n_features_out": self._n_features_out,
             "_supervised": self._supervised,
             "_small_data": False,
             "_knn_dists": knn_dists,
@@ -1197,12 +1205,17 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
         self.build_kwds = build_kwds
         self.device_ids = device_ids
 
+    @property
+    @mlfunc(convert_output=False)
+    def _n_features_out(self):
+        return self.embedding_.array.shape[1]
+
     @generate_docstring(
         X="dense_sparse",
         skip_parameters_heading=True,
     )
     @mlfunc(set_input_type=True)
-    def fit(self, X, y=None, *, convert_dtype="deprecated", knn_graph=None) -> "UMAP":
+    def fit(self, X, y=None, *, knn_graph=None) -> "UMAP":
         """
         Fit X into an embedded space.
 
@@ -1228,12 +1241,7 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             reset=True,
         )
         if y is not None:
-            y = check_y(
-                y,
-                dtype="float32",
-                convert_dtype=convert_dtype,
-                order="C",
-            )
+            y = check_y(y, dtype="float32", order="C")
             check_consistent_length(X, y)
 
         cdef int n_rows = X.shape[0]
@@ -1266,7 +1274,6 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             X,
             mem_type=mem_type,
             dtype="float32",
-            convert_dtype=convert_dtype,
             order="C",
             accept_sparse="csr",
             ensure_min_samples=2,
@@ -1339,7 +1346,7 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
                         init.data.ptr if isinstance(init, cp.ndarray) else init.ctypes.data
                     ),
                     <size_t> init.nbytes,
-                    <cudaStream_t> handle_.get_stream(),
+                    handle_.get_stream(),
                     any_resource[device_accessible](
                         get_current_device_resource().get_mr()
                     )
@@ -1428,10 +1435,8 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             "shape": "(n_samples, n_components)"
         }
     )
-    @mlfunc(preserve_index=True)
-    def fit_transform(
-        self, X, y=None, *, convert_dtype="deprecated", knn_graph=None
-    ):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def fit_transform(self, X, y=None, *, knn_graph=None):
         """
         Fit X into an embedded space and return that transformed
         output.
@@ -1452,7 +1457,7 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             over it. See the ``UMAP`` docstring on ``precomputed_knn`` for more
             information.
         """
-        self.fit(X, y, convert_dtype=convert_dtype, knn_graph=knn_graph)
+        self.fit(X, y, knn_graph=knn_graph)
         return self.embedding_
 
     @generate_docstring(
@@ -1463,8 +1468,8 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             "shape": "(n_samples, n_components)"
         }
     )
-    @mlfunc(preserve_index=True)
-    def transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def transform(self, X):
         """
         Transform X into the existing embedded space and return that
         transformed output.
@@ -1482,7 +1487,6 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             self,
             X,
             dtype="float32",
-            convert_dtype=convert_dtype,
             order="C",
             accept_sparse="csr",
         )
@@ -1589,8 +1593,8 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             "shape": "(n_samples, n_features)"
         }
     )
-    @mlfunc(preserve_index=True)
-    def inverse_transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
+    def inverse_transform(self, X):
         """Transform X in the existing embedded space back into the input
         data space and return that transformed output.
         """
@@ -1608,12 +1612,7 @@ class UMAP(InteropMixin, CMajorInputTagMixin, SparseInputTagMixin, Base):
             )
 
         # skip n_features_in_ validation
-        X = check_array(
-            X,
-            dtype="float32",
-            convert_dtype=convert_dtype,
-            order="C",
-        )
+        X = check_array(X, dtype="float32", order="C")
 
         n_samples = X.shape[0]
         if X.shape[1] != self.n_components:
@@ -1836,7 +1835,6 @@ def simplicial_set_embedding(
     metric_kwds=None,
     output_metric="euclidean",
     output_metric_kwds=None,
-    convert_dtype="deprecated",
     verbose=False,
 ):
     """Perform a fuzzy simplicial set embedding, using a specified
@@ -1929,7 +1927,6 @@ def simplicial_set_embedding(
     X = check_array(
         data,
         dtype="float32",
-        convert_dtype=convert_dtype,
         order="C",
         input_name="X",
     )
@@ -1987,7 +1984,6 @@ def simplicial_set_embedding(
         embedding = check_array(
             init,
             dtype="float32",
-            convert_dtype=convert_dtype,
             order="C",
             input_name="init",
         )

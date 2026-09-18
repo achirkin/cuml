@@ -5,7 +5,6 @@
 
 import cudf
 import cupy as cp
-import numba
 import numpy as np
 import pytest
 
@@ -21,13 +20,6 @@ TEST_OUTPUT_TYPES = (
     (None, (cp.ndarray, cp.ndarray)),  # Default is cupy if None is used
     ("numpy", (np.ndarray, np.ndarray)),
     ("cupy", (cp.ndarray, cp.ndarray)),
-    (
-        "numba",
-        (
-            numba.cuda.devicearray.DeviceNDArrayBase,
-            numba.cuda.devicearray.DeviceNDArrayBase,
-        ),
-    ),
     ("cudf", (cudf.DataFrame, cudf.Series)),
 )
 

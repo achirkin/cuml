@@ -15,7 +15,7 @@ General Behavior
 ----------------
 
 **Compatibility**
-   The accelerator is tested with ``scikit-learn`` versions 1.6 through 1.9,
+   The accelerator is tested with ``scikit-learn`` versions 1.6 through 1.9.1,
    ``umap-learn`` versions 0.5.7 through 0.5.12, and ``hdbscan`` versions 0.8.39
    through 0.8.44. When ``cuml.accel`` detects a version outside these ranges,
    it issues a runtime warning and continues. The untested version will likely
@@ -223,6 +223,22 @@ To compare results between estimators, we recommend comparing scores like
    - If ``X`` is sparse.
    - If ``X`` contains missing values (represented as ``NaN``).
    - If ``y`` is a multi-output target.
+
+
+.. dropdown:: ``IsolationForest``
+   :name: isolationforest
+
+   ``IsolationForest`` will fall back to CPU in the following cases:
+
+   - If ``warm_start=True``.
+   - If a non-``None`` ``sample_weight`` is passed to ``fit`` or
+     ``fit_predict``.
+   - If ``X`` is sparse.
+   - If ``X`` contains missing or non-finite values.
+
+   Additionally, the following fitted attributes are currently not computed:
+
+   - ``estimators_samples_``
 
 
 sklearn.kernel_ridge
@@ -492,6 +508,25 @@ sklearn.preprocessing
    ``LabelBinarizer`` has no known estimator-specific ``cuml.accel`` limitations.
 
 
+.. dropdown:: ``OneHotEncoder``
+   :name: onehotencoder
+
+   ``OneHotEncoder`` will fall back to CPU in the following cases:
+
+   - If any columns in ``X`` have ``bytes`` values (``str`` values work fine).
+   - If ``dtype`` is not a float or bool dtype.
+   - If ``drop`` is ``"if_binary"``
+   - If ``handle_unknown`` is ``"warn"`` or ``"infrequent_if_exist"``.
+   - If ``min_frequency`` is not ``None``.
+   - If ``max_categories`` is not ``None``.
+   - If ``feature_name_combiner`` is a callable.
+
+   Additional notes:
+
+   - cuML's encoder treats ``None`` and ``NaN`` values as identical, while
+     scikit-learn's encoder treats these as different categories.
+
+
 .. dropdown:: ``TargetEncoder``
    :name: targetencoder
 
@@ -619,10 +654,38 @@ UMAP
 HDBSCAN
 -------
 
-.. dropdown:: ``HDBSCAN``
+.. dropdown:: ``sklearn.cluster.HDBSCAN``
+   :name: sklearn-hdbscan-limitations
+
+   ``sklearn.cluster.HDBSCAN`` will fall back to CPU in the following cases:
+
+   - If ``metric`` is not ``"l2"`` or ``"euclidean"``.
+   - If ``metric_params`` is not empty.
+   - If ``store_centers`` is not ``None``.
+   - If the effective scikit-learn ``min_samples`` value is outside the range
+     of 2 through 1024. In particular, ``min_samples=1`` falls back to CPU.
+   - If the input is sparse, precomputed, or contains non-finite values.
+
+   The ``algorithm``, ``leaf_size``, ``n_jobs``, and ``copy`` parameters control
+   CPU implementation details and do not change GPU execution for supported
+   dense inputs. The public ``dbscan_clustering`` method runs on CPU using the
+   linkage tree computed during the GPU fit; it does not refit the estimator.
+
+   Additional notes:
+
+   - ``max_cluster_size=None`` is translated to cuML's unlimited value.
+   - cuML uses float32 computation and a parallel MST, so linkage distances,
+     probabilities, cluster labels, and even cluster assignments may differ
+     numerically from scikit-learn's CPU implementation.
+   - cuML's ``HDBSCAN`` implementation uses a parallel MST, which means
+     the results are not deterministic when there are duplicates in the mutual
+     reachability graph.
+   - ONNX export via ``skl2onnx`` is not supported for this estimator.
+
+.. dropdown:: ``hdbscan.HDBSCAN``
    :name: hdbscan-limitations
 
-   ``HDBSCAN`` will fall back to CPU in the following cases:
+   ``hdbscan.HDBSCAN`` will fall back to CPU in the following cases:
 
    - If ``metric`` is not ``"l2"`` or ``"euclidean"``.
    - If a ``memory`` location is configured.
@@ -637,11 +700,14 @@ HDBSCAN
 
    Additional notes:
 
+   - cuML uses float32 computation and a parallel MST, so linkage distances,
+     probabilities, cluster labels, and even cluster assignments may differ
+     numerically from the contrib CPU implementation.
    - cuML's ``HDBSCAN`` implementation uses a parallel MST, which means
      the results are not deterministic when there are duplicates in the mutual
      reachability graph.
    - ONNX export via ``skl2onnx`` is not supported for this estimator.
 
 
-.. _open an issue: https://github.com/rapidsai/cuml/issues
+.. _open an issue: https://github.com/NVIDIA/cuml/issues
 .. _Array API: https://scikit-learn.org/stable/modules/array_api.html

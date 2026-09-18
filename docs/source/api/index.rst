@@ -25,7 +25,6 @@ use.
    cuml.ensemble
    cuml.explainer
    cuml.feature_extraction
-   cuml.fil
    cuml.kernel_ridge
    cuml.linear_model
    cuml.manifold
@@ -101,6 +100,9 @@ Feature and Label Encoding (Single-GPU)
    * - :obj:`~cuml.preprocessing.OneHotEncoder`
      - Encode categorical features as a one-hot numeric array.
      - :mod:`cuml.preprocessing`
+   * - :obj:`~cuml.preprocessing.OrdinalEncoder`
+     - Encode categorical features as an integer array.
+     - :mod:`cuml.preprocessing`
    * - :obj:`~cuml.preprocessing.TargetEncoder`
      - Target Encoder for regression and classification targets.
      - :mod:`cuml.preprocessing`
@@ -115,6 +117,15 @@ Feature Scaling and Normalization (Single-GPU)
    * - Object
      - Description
      - Module
+   * - :obj:`~cuml.preprocessing.Binarizer`
+     - Binarize data according to a threshold.
+     - :mod:`cuml.preprocessing`
+   * - :obj:`~cuml.preprocessing.KBinsDiscretizer`
+     - Bin continuous data into intervals.
+     - :mod:`cuml.preprocessing`
+   * - :obj:`~cuml.preprocessing.KernelCenterer`
+     - Center a kernel matrix.
+     - :mod:`cuml.preprocessing`
    * - :obj:`~cuml.preprocessing.MaxAbsScaler`
      - Scale each feature by its maximum absolute value.
      - :mod:`cuml.preprocessing`
@@ -123,6 +134,12 @@ Feature Scaling and Normalization (Single-GPU)
      - :mod:`cuml.preprocessing`
    * - :obj:`~cuml.preprocessing.Normalizer`
      - Normalize samples individually to unit norm.
+     - :mod:`cuml.preprocessing`
+   * - :obj:`~cuml.preprocessing.PowerTransformer`
+     - Apply a power transform featurewise to make data more Gaussian-like.
+     - :mod:`cuml.preprocessing`
+   * - :obj:`~cuml.preprocessing.QuantileTransformer`
+     - Transform features using quantiles information.
      - :mod:`cuml.preprocessing`
    * - :obj:`~cuml.preprocessing.RobustScaler`
      - Scale features using statistics that are robust to outliers.
@@ -144,6 +161,12 @@ Other preprocessing methods (Single-GPU)
    * - :obj:`~cuml.compose.ColumnTransformer`
      - Applies transformers to columns of an array or DataFrame.
      - :mod:`cuml.compose`
+   * - :obj:`~cuml.preprocessing.FunctionTransformer`
+     - Construct a transformer from an arbitrary callable.
+     - :mod:`cuml.preprocessing`
+   * - :obj:`~cuml.preprocessing.MissingIndicator`
+     - Binary indicators for missing values.
+     - :mod:`cuml.preprocessing`
    * - :obj:`~cuml.preprocessing.PolynomialFeatures`
      - Generate polynomial and interaction features.
      - :mod:`cuml.preprocessing`
@@ -166,6 +189,9 @@ Feature Extraction (Single-GPU)
      - :mod:`cuml.feature_extraction`
    * - :obj:`~cuml.feature_extraction.text.HashingVectorizer`
      - Convert a collection of text documents to a matrix of token occurrences.
+     - :mod:`cuml.feature_extraction`
+   * - :obj:`~cuml.feature_extraction.text.TfidfTransformer`
+     - Transform a count matrix to a normalized tf or tf-idf representation.
      - :mod:`cuml.feature_extraction`
    * - :obj:`~cuml.feature_extraction.text.TfidfVectorizer`
      - Convert a collection of raw documents to a matrix of TF-IDF features.
@@ -237,9 +263,6 @@ Regression and Classification
    * - :obj:`~cuml.linear_model.ElasticNet`
      - ElasticNet regression.
      - :mod:`cuml.linear_model`
-   * - :obj:`~cuml.fil.ForestInference`
-     - Forest Inference for fast prediction of tree-based models.
-     - :mod:`cuml.fil`
    * - :obj:`~cuml.naive_bayes.GaussianNB`
      - Gaussian Naive Bayes.
      - :mod:`cuml.naive_bayes`
@@ -252,6 +275,9 @@ Regression and Classification
    * - :obj:`~cuml.neighbors.KNeighborsRegressor`
      - K-Nearest Neighbors regressor.
      - :mod:`cuml.neighbors`
+   * - :obj:`~cuml.linear_model.Lars`
+     - Least Angle Regression.
+     - :mod:`cuml.linear_model`
    * - :obj:`~cuml.linear_model.Lasso`
      - Lasso regression.
      - :mod:`cuml.linear_model`
@@ -408,6 +434,21 @@ Neighbors
    * - :obj:`~cuml.neighbors.NearestNeighbors`
      - Unsupervised nearest neighbors.
      - :mod:`cuml.neighbors`
+
+
+Outlier Detection
+=================
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 50 20
+
+   * - Object
+     - Description
+     - Module
+   * - :obj:`~cuml.ensemble.IsolationForest`
+     - Isolation Forest Algorithm.
+     - :mod:`cuml.ensemble`
 
 
 Time Series

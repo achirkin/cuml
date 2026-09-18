@@ -64,8 +64,7 @@ class IncrementalPCA(PCA):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -200,9 +199,7 @@ class IncrementalPCA(PCA):
         self.batch_size = batch_size
 
     @mlfunc(set_input_type=True)
-    def fit(
-        self, X, y=None, *, convert_dtype="deprecated"
-    ) -> "IncrementalPCA":
+    def fit(self, X, y=None) -> "IncrementalPCA":
         """
         Fit the model with X, using minibatches of size batch_size.
 
@@ -231,7 +228,6 @@ class IncrementalPCA(PCA):
             X,
             accept_sparse=["csr", "csc"],
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             reset=True,
         )
 
@@ -391,8 +387,8 @@ class IncrementalPCA(PCA):
 
         return self
 
-    @mlfunc(preserve_index=True)
-    def transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def transform(self, X):
         """
         Apply dimensionality reduction to X.
 
@@ -405,13 +401,6 @@ class IncrementalPCA(PCA):
         X : array-like or sparse matrix, shape (n_samples, n_features)
             New data, where n_samples is the number of samples
             and n_features is the number of features.
-
-        convert_dtype : bool, default="deprecated"
-            .. deprecated:: 26.08
-                `convert_dtype` was deprecated in version 26.08 and will be
-                removed in version 26.10. cuML only copies input arrays when
-                necessary (e.g. to unify dtypes), there is no reason to provide
-                this keyword going forward.
 
         Returns
         -------
@@ -429,7 +418,6 @@ class IncrementalPCA(PCA):
                 X,
                 accept_sparse=["csr", "csc"],
                 dtype=self.components_.dtype,
-                convert_dtype=convert_dtype,
             )
 
             n_samples, n_features = X.shape

@@ -33,12 +33,22 @@ import numpy as cpu_np
 from cupyx.scipy import sparse
 from scipy import optimize, stats
 from scipy.special import boxcox
+from sklearn.base import OneToOneFeatureMixin, ClassNamePrefixFeaturesOutMixin
 
 from cuml.common.sparse import csr_row_normalize_l1, csr_row_normalize_l2
 from cuml.internals.interop import InteropMixin
-from cuml.internals.mixins import AllowNaNTagMixin, SparseInputTagMixin
+from cuml.internals.mixins import (
+    AllowNaNTagMixin,
+    SparseInputTagMixin,
+    DeprecatedGetFeatureNamesMixin,
+)
 from cuml.internals.outputs import using_output_type, mlfunc, ReflectedAttr
-from cuml.internals.validation import check_is_fitted, check_array, check_inputs
+from cuml.internals.validation import (
+    check_is_fitted,
+    check_array,
+    check_inputs,
+    check_input_features,
+)
 from cuml.thirdparty_adapters.sparsefuncs_fast import csr_polynomial_expansion
 
 from ..utils.extmath import _incremental_mean_and_var, row_norms
@@ -205,9 +215,12 @@ def scale(X, *, axis=0, with_mean=True, with_std=True, copy=True):
     return X
 
 
-class MinMaxScaler(TransformerMixin,
-                   BaseEstimator,
-                   AllowNaNTagMixin):
+class MinMaxScaler(
+    TransformerMixin,
+    AllowNaNTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Transform features by scaling each feature to a given range.
 
     This estimator scales and translates each feature individually such
@@ -398,7 +411,7 @@ class MinMaxScaler(TransformerMixin,
         self.data_range_ = data_range
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X):
         """Scale features of X according to feature_range.
 
@@ -425,7 +438,7 @@ class MinMaxScaler(TransformerMixin,
 
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(self, X):
         """Undo the scaling of X according to feature_range.
 
@@ -515,11 +528,14 @@ def minmax_scale(X, feature_range=(0, 1), *, axis=0, copy=True):
         return X
 
 
-class StandardScaler(TransformerMixin,
-                     AllowNaNTagMixin,
-                     SparseInputTagMixin,
-                     BaseEstimator,
-                     InteropMixin):
+class StandardScaler(
+    TransformerMixin,
+    AllowNaNTagMixin,
+    SparseInputTagMixin,
+    InteropMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Standardize features by removing the mean and scaling to unit variance
 
     The standard score of a sample `x` is calculated as:
@@ -850,7 +866,7 @@ class StandardScaler(TransformerMixin,
 
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X, copy=None):
         """Perform standardization by centering and scaling
 
@@ -890,7 +906,7 @@ class StandardScaler(TransformerMixin,
 
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(self, X, copy=None):
         """Scale back the data to the original representation
 
@@ -937,10 +953,13 @@ class StandardScaler(TransformerMixin,
         return X
 
 
-class MaxAbsScaler(TransformerMixin,
-                   BaseEstimator,
-                   AllowNaNTagMixin,
-                   SparseInputTagMixin):
+class MaxAbsScaler(
+    TransformerMixin,
+    AllowNaNTagMixin,
+    SparseInputTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Scale each feature by its maximum absolute value.
 
     This estimator scales and translates each feature individually such
@@ -1084,7 +1103,7 @@ class MaxAbsScaler(TransformerMixin,
         self.scale_ = _handle_zeros_in_scale(max_abs)
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X):
         """Scale the data
 
@@ -1110,7 +1129,7 @@ class MaxAbsScaler(TransformerMixin,
 
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(self, X):
         """Scale back the data to the original representation
 
@@ -1187,10 +1206,13 @@ def maxabs_scale(X, *, axis=0, copy=True):
         return X
 
 
-class RobustScaler(TransformerMixin,
-                   BaseEstimator,
-                   AllowNaNTagMixin,
-                   SparseInputTagMixin):
+class RobustScaler(
+    TransformerMixin,
+    AllowNaNTagMixin,
+    SparseInputTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Scale features using statistics that are robust to outliers.
 
     This Scaler removes the median and scales the data according to the
@@ -1350,7 +1372,7 @@ class RobustScaler(TransformerMixin,
 
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X):
         """Center and scale the data.
 
@@ -1379,7 +1401,7 @@ class RobustScaler(TransformerMixin,
                 X /= self.scale_
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(self, X):
         """Scale back the data to the original representation
 
@@ -1480,10 +1502,13 @@ def robust_scale(X, *, axis=0, with_centering=True, with_scaling=True,
         return X
 
 
-class PolynomialFeatures(TransformerMixin,
-                         BaseEstimator,
-                         AllowNaNTagMixin,
-                         SparseInputTagMixin):
+class PolynomialFeatures(
+    DeprecatedGetFeatureNamesMixin,
+    TransformerMixin,
+    BaseEstimator,
+    AllowNaNTagMixin,
+    SparseInputTagMixin,
+):
     """Generate polynomial and interaction features.
 
     Generate a new feature matrix consisting of all polynomial combinations
@@ -1584,35 +1609,35 @@ class PolynomialFeatures(TransformerMixin,
                                               minlength=self.n_input_features_)
                               for c in combinations])
 
-    def get_feature_names(self, input_features=None):
-        """
-        Return feature names for output features
+    def get_feature_names_out(self, input_features=None):
+        """Get output feature names for transformation.
 
         Parameters
         ----------
-        input_features : list of string, length n_features, optional
-            String names for input features if available. By default,
-            "x0", "x1", ... "xn_features" is used.
+        input_features : array-like of str or None, default=None
+            Input feature names.
 
         Returns
         -------
-        output_feature_names : list of string, length n_output_features
-
+        feature_names_out : numpy.ndarray of str objects.
+            Transformed feature names.
         """
-        powers = self.powers_
-        if input_features is None:
-            input_features = ['x%d' % i for i in range(powers.shape[1])]
+        check_is_fitted(self)
+        input_features = check_input_features(self, input_features)
         feature_names = []
-        for row in powers:
+        for row in self.powers_:
             inds = cpu_np.where(row)[0]
             if len(inds):
-                name = " ".join("%s^%d" % (input_features[ind], exp)
-                                if exp != 1 else input_features[ind]
-                                for ind, exp in zip(inds, row[inds]))
+                name = " ".join(
+                    f"{input_features[ind]}^{exp}"
+                    if exp != 1
+                    else input_features[ind]
+                    for ind, exp in zip(inds, row[inds])
+                )
             else:
                 name = "1"
             feature_names.append(name)
-        return feature_names
+        return cpu_np.asarray(feature_names, dtype=object)
 
     @mlfunc(set_input_type=True)
     def fit(self, X, y=None) -> "PolynomialFeatures":
@@ -1638,7 +1663,7 @@ class PolynomialFeatures(TransformerMixin,
         self.n_output_features_ = sum(1 for _ in combinations)
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X):
         """Transform data to polynomial features
 
@@ -1855,9 +1880,12 @@ def normalize(X, norm='l2', *, axis=1, copy=True, return_norm=False):
         return X
 
 
-class Normalizer(TransformerMixin,
-                 SparseInputTagMixin,
-                 BaseEstimator):
+class Normalizer(
+    TransformerMixin,
+    SparseInputTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Normalize samples individually to unit norm.
 
     Each sample (i.e. each row of the data matrix) with at least one
@@ -1934,7 +1962,7 @@ class Normalizer(TransformerMixin,
         check_inputs(self, X, accept_sparse="csr", reset=True)
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X, copy=None):
         """Scale each non zero row of X to unit norm
 
@@ -1990,9 +2018,12 @@ def binarize(X, *, threshold=0.0, copy=True):
     return X
 
 
-class Binarizer(TransformerMixin,
-                SparseInputTagMixin,
-                BaseEstimator):
+class Binarizer(
+    TransformerMixin,
+    SparseInputTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Binarize data (set feature values to 0 or 1) according to a threshold
 
     Values greater than the threshold map to 1, while values less than
@@ -2069,7 +2100,7 @@ class Binarizer(TransformerMixin,
         check_inputs(self, X, accept_sparse=['csr', 'csc'], reset=True)
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X, copy=None):
         """Binarize each element of X
 
@@ -2153,7 +2184,11 @@ def add_dummy_feature(X, value=1.0):
         return X
 
 
-class KernelCenterer(TransformerMixin, BaseEstimator):
+class KernelCenterer(
+    TransformerMixin,
+    ClassNamePrefixFeaturesOutMixin,
+    BaseEstimator,
+):
     """Center a kernel matrix
 
     Let K(x, z) be a kernel defined by phi(x)^T phi(z), where phi is a
@@ -2196,6 +2231,15 @@ class KernelCenterer(TransformerMixin, BaseEstimator):
         # Needed for backported inspect.signature compatibility with PyPy
         pass
 
+    @property
+    def _n_features_out(self):
+        return self.n_features_in_
+
+    def __sklearn_tags__(self):
+        tags = super().__sklearn_tags__()
+        tags.input_tags.pairwise = True
+        return tags
+
     @mlfunc(set_input_type=True)
     def fit(self, K, y=None) -> 'KernelCenterer':
         """Fit KernelCenterer
@@ -2221,7 +2265,7 @@ class KernelCenterer(TransformerMixin, BaseEstimator):
         self.K_fit_all_ = self.K_fit_rows_.sum() / n_samples
         return self
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, K, copy=True):
         """Center kernel matrix.
 
@@ -2251,14 +2295,13 @@ class KernelCenterer(TransformerMixin, BaseEstimator):
 
         return K
 
-    @property
-    def _pairwise(self):
-        return True
 
-
-class QuantileTransformer(TransformerMixin,
-                          BaseEstimator,
-                          AllowNaNTagMixin):
+class QuantileTransformer(
+    TransformerMixin,
+    AllowNaNTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Transform features using quantiles information.
 
     This method transforms the features to follow a uniform or a normal
@@ -2420,17 +2463,17 @@ class QuantileTransformer(TransformerMixin,
             column_nnz_data = X.data[X.indptr[feature_idx]:
                                      X.indptr[feature_idx + 1]]
             if len(column_nnz_data) > self.subsample:
-                column_subsample = (self.subsample * len(column_nnz_data) //
-                                    n_samples)
-                if self.ignore_implicit_zeros:
-                    column_data = np.zeros(shape=column_subsample,
-                                           dtype=X.dtype)
-                else:
-                    column_data = np.zeros(shape=self.subsample, dtype=X.dtype)
+                column_data = np.zeros(shape=self.subsample, dtype=X.dtype)
+                column_subsample = (
+                    self.subsample
+                    if self.ignore_implicit_zeros
+                    else self.subsample * len(column_nnz_data) // n_samples
+                )
                 column_data[:column_subsample] = np.array(
-                    random_state.choice(column_nnz_data.get(),
-                                        size=column_subsample,
-                                        replace=False))
+                    random_state.choice(
+                        column_nnz_data.get(), size=column_subsample, replace=False
+                    )
+                )
             else:
                 if self.ignore_implicit_zeros:
                     column_data = np.zeros(shape=len(column_nnz_data),
@@ -2448,6 +2491,7 @@ class QuantileTransformer(TransformerMixin,
                     cpu_np.nanpercentile(np.asnumpy(column_data),
                                          np.asnumpy(references)))
         self.quantiles_ = cpu_np.transpose(np.asnumpy(self.quantiles_))
+
         # due to floating-point precision error in `np.nanpercentile`,
         # make sure the quantiles are monotonically increasing
         # Upstream issue in numpy:
@@ -2634,7 +2678,7 @@ class QuantileTransformer(TransformerMixin,
 
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X):
         """Feature-wise transformation of the data.
 
@@ -2656,7 +2700,7 @@ class QuantileTransformer(TransformerMixin,
 
         return self._transform(X, inverse=False)
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(self, X):
         """Back-projection to the original space.
 
@@ -2792,9 +2836,12 @@ def quantile_transform(X, *, axis=0, n_quantiles=1000,
                          " axis={}".format(axis))
 
 
-class PowerTransformer(TransformerMixin,
-                       BaseEstimator,
-                       AllowNaNTagMixin):
+class PowerTransformer(
+    TransformerMixin,
+    AllowNaNTagMixin,
+    OneToOneFeatureMixin,
+    BaseEstimator,
+):
     """Apply a power transform featurewise to make data more Gaussian-like.
 
     Power transforms are a family of parametric, monotonic transformations
@@ -2904,7 +2951,11 @@ class PowerTransformer(TransformerMixin,
         self._fit(X, y=y, force_transform=False)
         return self
 
-    @mlfunc(set_input_type=True)
+    @mlfunc(
+        set_input_type=True,
+        preserve_index=True,
+        column_names="feature_names_out",
+    )
     def fit_transform(self, X, y=None):
         return self._fit(X, y, force_transform=True)
 
@@ -2943,7 +2994,7 @@ class PowerTransformer(TransformerMixin,
 
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
     def transform(self, X):
         """Apply the power transform to each feature using the fitted lambdas.
 
@@ -2978,7 +3029,7 @@ class PowerTransformer(TransformerMixin,
 
         return X
 
-    @mlfunc
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
     def inverse_transform(self, X):
         """Apply the inverse power transformation using the fitted lambdas.
 

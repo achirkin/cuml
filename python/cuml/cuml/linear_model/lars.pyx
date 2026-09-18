@@ -87,8 +87,7 @@ class Lars(RegressorMixin, Base):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -200,7 +199,7 @@ class Lars(RegressorMixin, Base):
 
     @generate_docstring(y="dense_anydtype")
     @mlfunc(set_input_type=True)
-    def fit(self, X, y, *, convert_dtype="deprecated") -> "Lars":
+    def fit(self, X, y) -> "Lars":
         """
         Fit the model with X and y.
 
@@ -211,7 +210,6 @@ class Lars(RegressorMixin, Base):
             X,
             y,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             order="F",
             ensure_min_samples=2,
             reset=True,
@@ -340,7 +338,7 @@ class Lars(RegressorMixin, Base):
         }
     )
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """Predicts `y` values for `X`."""
         check_is_fitted(self)
 
@@ -348,7 +346,6 @@ class Lars(RegressorMixin, Base):
             self,
             X,
             dtype=self.coef_.dtype,
-            convert_dtype=convert_dtype,
             order="F",
         )
         cdef int n_rows = X.shape[0]

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import cupy as cp
@@ -80,8 +80,7 @@ class LogisticRegression(
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -288,9 +287,7 @@ class LogisticRegression(
 
     @generate_docstring(X="dense_sparse")
     @mlfunc(set_input_type=True)
-    def fit(
-        self, X, y, sample_weight=None, *, convert_dtype="deprecated"
-    ) -> "LogisticRegression":
+    def fit(self, X, y, sample_weight=None) -> "LogisticRegression":
         """
         Fit the model with X and y.
         """
@@ -301,7 +298,6 @@ class LogisticRegression(
             X,
             y,
             sample_weight=sample_weight,
-            convert_dtype=convert_dtype,
             loss="logistic",
             fit_intercept=self.fit_intercept,
             l1_strength=l1_strength,
@@ -333,12 +329,12 @@ class LogisticRegression(
         },
     )
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """
         Predicts the y for X.
 
         """
-        scores = self.decision_function(X, convert_dtype=convert_dtype)
+        scores = self.decision_function(X)
 
         if scores.ndim == 1:
             indices = (scores > 0).view(cp.int8)
@@ -357,11 +353,11 @@ class LogisticRegression(
         },
     )
     @mlfunc(preserve_index=True)
-    def predict_proba(self, X, *, convert_dtype="deprecated"):
+    def predict_proba(self, X):
         """
         Predicts the class probabilities for each class in X
         """
-        scores = self.decision_function(X, convert_dtype=convert_dtype)
+        scores = self.decision_function(X)
 
         n_classes = self.classes_.shape[0]
         if n_classes == 2:
@@ -386,10 +382,10 @@ class LogisticRegression(
         },
     )
     @mlfunc(preserve_index=True)
-    def predict_log_proba(self, X, *, convert_dtype="deprecated"):
+    def predict_log_proba(self, X):
         """
         Predicts the log class probabilities for each class in X
         """
-        out = self.predict_proba(X, convert_dtype=convert_dtype)
+        out = self.predict_proba(X)
         cp.log(out, out=out)
         return out

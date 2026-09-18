@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 from cuml.common.doc_utils import generate_docstring
 from cuml.internals.base import Base
@@ -73,8 +73,7 @@ class MBSGDRegressor(
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -161,7 +160,7 @@ class MBSGDRegressor(
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y, *, convert_dtype="deprecated") -> "MBSGDRegressor":
+    def fit(self, X, y) -> "MBSGDRegressor":
         """
         Fit the model with X and y.
 
@@ -172,7 +171,6 @@ class MBSGDRegressor(
             self,
             X,
             y,
-            convert_dtype=convert_dtype,
             loss=self.loss,
             penalty=self.penalty,
             alpha=self.alpha,

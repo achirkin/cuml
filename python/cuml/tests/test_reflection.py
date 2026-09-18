@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse
-from numba.cuda import as_cuda_array, is_cuda_array
+from sklearn.base import ClassNamePrefixFeaturesOutMixin
 
 import cuml
 from cuml.internals.base import Base
@@ -25,7 +25,7 @@ from cuml.internals.outputs import (
 )
 from cuml.internals.validation import check_inputs
 
-OUTPUT_TYPES = ["numpy", "numba", "cupy", "cudf", "pandas"]
+OUTPUT_TYPES = ["numpy", "cupy", "cudf", "pandas"]
 
 
 @pytest.fixture(autouse=True)
@@ -36,33 +36,29 @@ def reset_global_output_type():
 
 
 def assert_output_type(arr, output_type):
-    if output_type == "numba":
-        assert is_cuda_array(arr)
-    else:
-        cls = {
-            "numpy": np.ndarray,
-            "cupy": cp.ndarray,
-            "cudf": (cudf.Series, cudf.DataFrame),
-            "pandas": (pd.Series, pd.DataFrame),
-        }[output_type]
-        assert isinstance(arr, cls)
+    cls = {
+        "numpy": np.ndarray,
+        "cupy": cp.ndarray,
+        "cudf": (cudf.Series, cudf.DataFrame),
+        "pandas": (pd.Series, pd.DataFrame),
+    }[output_type]
+    assert isinstance(arr, cls)
 
 
 def rand_array(output_type, *, shape=(8, 4), seed=42):
     X = cp.random.default_rng(seed).uniform(
         low=0.0, high=10.0, size=shape, dtype="float32"
     )
-    if output_type == "numba":
-        return as_cuda_array(X)
-    elif output_type == "cupy":
+    if output_type == "cupy":
         return X
     elif output_type == "numpy":
         return cp.asnumpy(X)
     elif output_type == "pandas":
-        return pd.DataFrame(X.get())
+        X = X.get()
+        return pd.DataFrame(X) if X.ndim == 2 else pd.Series(X)
     else:
         assert output_type == "cudf"
-        return cudf.DataFrame(X)
+        return cudf.DataFrame(X) if X.ndim == 2 else cudf.Series(X)
 
 
 class ImplementsArray:
@@ -246,7 +242,6 @@ def test_estimator_output_type(input_type, output_type):
 @pytest.mark.parametrize("output_type", OUTPUT_TYPES)
 def test_global_output_type(input_type, output_type):
     cuml.set_global_output_type(output_type)
-
     X = rand_array(input_type)
     model = cuml.DBSCAN(eps=1.0, min_samples=1)
     labels = model.fit_predict(X)
@@ -291,19 +286,42 @@ def test_global_input_with_estimator_output_type():
     assert_output_type(model.components_, "pandas")
 
 
-@pytest.mark.parametrize("input_type", ["numpy", "cupy"])
+@pytest.mark.parametrize(
+    "input_type, order",
+    [
+        ("numpy", "C"),
+        ("numpy", "F"),
+        ("cupy", "C"),
+        ("cupy", "F"),
+        ("pandas", "F"),
+        ("cudf", "F"),
+    ],
+)
 @pytest.mark.parametrize("output_type", ["numpy", "cupy"])
-@pytest.mark.parametrize("order", ["C", "F"])
-def test_convert_arrays_dense_array(input_type, output_type, order):
+def test_convert_arrays_dense_array(input_type, order, output_type):
+    X = rand_array(input_type)
     if input_type == "cupy":
-        X = cp.asarray(rand_array("cupy"), order=order)
-    else:
-        X = np.asarray(rand_array("numpy"), order=order)
+        X = cp.asarray(X, order=order)
+    elif input_type == "numpy":
+        X = np.asarray(X, order=order)
 
     out = convert_arrays(X, output_type)
+    sol = X.to_numpy() if hasattr(X, "to_numpy") else cp.asnumpy(X)
+
     assert_output_type(out, output_type)
-    np.testing.assert_array_equal(cp.asnumpy(X), cp.asnumpy(out))
+    np.testing.assert_array_equal(cp.asnumpy(out), sol)
     assert out.flags.c_contiguous if order == "C" else out.flags.f_contiguous
+
+
+@pytest.mark.parametrize("input_type", ["numpy", "cupy", "pandas", "cudf"])
+@pytest.mark.parametrize("output_type", ["numpy", "cupy"])
+def test_convert_arrays_dense_array_1d(input_type, output_type):
+    X = rand_array(input_type, shape=8)
+    out = convert_arrays(X, output_type)
+    sol = X.to_numpy() if hasattr(X, "to_numpy") else cp.asnumpy(X)
+
+    assert_output_type(out, output_type)
+    np.testing.assert_array_equal(cp.asnumpy(out), sol)
 
 
 @pytest.mark.parametrize("input_type", ["scipy", "cupyx"])
@@ -321,7 +339,7 @@ def test_convert_arrays_sparse_array(input_type, output_type, format):
 
     out = convert_arrays(X, output_type)
 
-    if output_type in ["cupy", "cudf", "numba"]:
+    if output_type in ["cupy", "cudf"]:
         assert cupyx.scipy.sparse.issparse(out)
     else:
         assert scipy.sparse.issparse(out)
@@ -335,7 +353,7 @@ def test_convert_arrays_sparse_array(input_type, output_type, format):
 
 
 @pytest.mark.parametrize("kind", ["dataframe", "series"])
-@pytest.mark.parametrize("input_type", ["cupy", "numpy"])
+@pytest.mark.parametrize("input_type", ["cupy", "numpy", "pandas", "cudf"])
 @pytest.mark.parametrize("output_type", ["pandas", "cudf"])
 def test_convert_arrays_dataframe(kind, input_type, output_type):
     arr = rand_array(input_type, shape=((8, 4) if kind == "dataframe" else 8))
@@ -353,7 +371,7 @@ def test_convert_arrays_dataframe(kind, input_type, output_type):
 @pytest.mark.parametrize("xdf", [pd, cudf])
 @pytest.mark.parametrize("kind", ["dataframe", "series"])
 @pytest.mark.parametrize("use_pair", [False, True])
-@pytest.mark.parametrize("input_type", ["cupy", "numpy"])
+@pytest.mark.parametrize("input_type", ["cupy", "numpy", "pandas", "cudf"])
 @pytest.mark.parametrize("output_type", ["pandas", "cudf"])
 def test_convert_arrays_dataframe_with_index(
     xdf, kind, use_pair, input_type, output_type
@@ -367,13 +385,13 @@ def test_convert_arrays_dataframe_with_index(
         res = convert_arrays(arr, output_type, index=index)
 
     if kind == "dataframe":
-        cudf.testing.assert_frame_equal(
-            cudf.DataFrame(res), cudf.DataFrame(arr, index=index)
-        )
+        sol = cudf.DataFrame(arr)
+        sol.index = index
+        cudf.testing.assert_frame_equal(cudf.DataFrame(res), sol)
     else:
-        cudf.testing.assert_series_equal(
-            cudf.Series(res), cudf.Series(arr, index=index)
-        )
+        sol = cudf.Series(arr)
+        sol.index = index
+        cudf.testing.assert_series_equal(cudf.Series(res), sol)
 
 
 @pytest.mark.parametrize(
@@ -438,7 +456,7 @@ def test_mlfunc_sparse_outputs(output_type):
     cuml.set_global_output_type(output_type)
     res = make_sparse()
 
-    if output_type in [None, "input", "cupy", "cudf", "numba", "cuml"]:
+    if output_type in [None, "input", "cupy", "cudf", "cuml"]:
         assert cupyx.scipy.sparse.issparse(res)
     else:
         assert scipy.sparse.issparse(res)
@@ -525,6 +543,65 @@ def test_mlfunc_preserve_index(input_type, output_type):
     )
 
 
+@pytest.mark.parametrize("input_type", ["pandas", "cudf"])
+def test_mlfunc_column_names(input_type):
+    xdf = cudf if input_type == "cudf" else pd
+    X = xdf.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]})
+
+    class MyEstimator(ClassNamePrefixFeaturesOutMixin, Base):
+        @mlfunc(set_input_type=True)
+        def fit(self, X):
+            X = check_inputs(self, X, reset=True)
+            self._n_features_out = X.shape[1] * 2
+            return self
+
+        @mlfunc(column_names="feature_names_out")
+        def fit_transform(self, X):
+            self.fit(X)
+            return cp.ones((X.shape[0], self._n_features_out))
+
+        @mlfunc(column_names="feature_names_out")
+        def returns_sparse_matrix(self, X):
+            return cupyx.scipy.sparse.eye(
+                X.shape[0],
+                self._n_features_out,
+                format="csr",
+            )
+
+        @mlfunc
+        def no_names(self, X):
+            return cp.ones((X.shape[0], self.n_features_in_))
+
+        @mlfunc(column_names="feature_names_in")
+        def inverse_transform(self, X):
+            return cp.ones((X.shape[0], self.n_features_in_))
+
+    # Works with feature names
+    model = MyEstimator()
+    Xt = model.fit_transform(X)
+    np.testing.assert_array_equal(Xt.columns, model.get_feature_names_out())
+
+    X2 = model.inverse_transform(Xt)
+    np.testing.assert_array_equal(X2.columns, X.columns)
+
+    # column_names=None doesn't add anything
+    res = model.no_names(X)
+    np.testing.assert_array_equal(res.columns, [0, 1])
+
+    # No error applying names if not a dataframe output
+    res = model.returns_sparse_matrix(X)
+    assert cupyx.scipy.sparse.issparse(res) or scipy.sparse.issparse(res)
+
+    # Works if no feature names
+    X = X.to_numpy()
+    model = MyEstimator(output_type=input_type)
+    Xt = model.fit_transform(X)
+    np.testing.assert_array_equal(Xt.columns, model.get_feature_names_out())
+
+    X2 = model.inverse_transform(Xt)
+    np.testing.assert_array_equal(X2.columns, [0, 1])
+
+
 @pytest.mark.parametrize("dtype", ["int32", "object", "U"])
 @pytest.mark.parametrize("output_type", OUTPUT_TYPES)
 def test_class_labels(dtype, output_type):
@@ -539,7 +616,7 @@ def test_class_labels(dtype, output_type):
     def myfunc():
         return ClassLabels(indices, classes)
 
-    if dtype in ("object", "U") and output_type in ("cupy", "numba"):
+    if dtype in ("object", "U") and output_type == "cupy":
         with pytest.raises(
             TypeError,
             match=f"output_type={output_type!r} doesn't support outputs of dtype",
@@ -612,6 +689,44 @@ def test_array_like_inputs_treated_as_numpy_by_reflection():
     # Methods with no args use input type
     assert_output_type(model_fit_list.example_no_args(), "numpy")
     assert_output_type(model_fit_cupy.example_no_args(), "cupy")
+
+
+@pytest.mark.parametrize("output_type", ["pandas", "cudf"])
+def test_one_col_2d_array_only_coerced_to_series_for_predict(output_type):
+    """For legacy reasons, cuml will coerce a 1 column 2D output to a Series
+    instead of a DataFrame when outputting pandas/cudf types. In the long run
+    we want to deprecate and remove this (See #7893). However, the output of
+    `transform`/`inverse_transform`/... should _always_ be a 2D output. Here we
+    test that this coercion is only enabled for `predict*` methods."""
+
+    class MyEstimator(Base):
+        @mlfunc
+        def transform(self, X):
+            return cp.ones((X.shape[0], 1))
+
+        @mlfunc
+        def fit_transform(self, X):
+            return cp.ones((X.shape[0], 1))
+
+        @mlfunc
+        def fit_predict(self, X):
+            return cp.ones((X.shape[0], 1))
+
+        @mlfunc
+        def predict(self, X):
+            return cp.ones((X.shape[0], 1))
+
+        @mlfunc
+        def predict_proba(self, X):
+            return cp.ones((X.shape[0], 1))
+
+    model = MyEstimator(output_type=output_type)
+    X = cp.ones((3, 4))
+    assert model.fit_transform(X).ndim == 2
+    assert model.transform(X).ndim == 2
+    assert model.fit_predict(X).ndim == 1
+    assert model.predict(X).ndim == 1
+    assert model.predict_proba(X).ndim == 1
 
 
 def test_estimator_method_with_no_array_input():

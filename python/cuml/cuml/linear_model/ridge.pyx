@@ -109,8 +109,7 @@ class Ridge(InteropMixin,
     copy_X: bool, default=True
         If True, X will never be mutated. Setting to False may reduce memory
         usage, at the cost of potentially mutating X.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -362,7 +361,7 @@ class Ridge(InteropMixin,
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y, sample_weight=None, *, convert_dtype="deprecated") -> "Ridge":
+    def fit(self, X, y, sample_weight=None) -> "Ridge":
         """
         Fit the model with X and y.
         """
@@ -373,7 +372,6 @@ class Ridge(InteropMixin,
             y,
             sample_weight,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             ensure_min_samples=2,
             accept_sparse=True,
             accept_large_sparse=True,

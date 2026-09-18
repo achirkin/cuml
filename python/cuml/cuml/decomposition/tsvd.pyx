@@ -4,6 +4,7 @@
 #
 import cupy as cp
 import numpy as np
+from sklearn.base import ClassNamePrefixFeaturesOutMixin
 
 from cuml.common.doc_utils import generate_docstring
 from cuml.internals.base import Base, get_handle
@@ -70,6 +71,7 @@ cdef extern from "cuml/decomposition/tsvd.hpp" namespace "ML" nogil:
 
 class TruncatedSVD(InteropMixin,
                    FMajorInputTagMixin,
+                   ClassNamePrefixFeaturesOutMixin,
                    Base):
     """
     TruncatedSVD is used to compute the top K singular values and vectors of a
@@ -157,8 +159,7 @@ class TruncatedSVD(InteropMixin,
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -278,6 +279,7 @@ class TruncatedSVD(InteropMixin,
         self.tol = tol
 
     @property
+    @mlfunc(convert_output=False)
     def _n_features_out(self):
         """Number of transformed output features."""
         # Exposed to support sklearn's `get_feature_names_out`
@@ -297,8 +299,12 @@ class TruncatedSVD(InteropMixin,
                                        'type': 'dense',
                                        'description': 'Reduced version of X',
                                        'shape': '(n_samples, n_components)'})
-    @mlfunc(set_input_type=True, preserve_index=True)
-    def fit_transform(self, X, y=None, *, convert_dtype="deprecated"):
+    @mlfunc(
+        set_input_type=True,
+        preserve_index=True,
+        column_names="feature_names_out",
+    )
+    def fit_transform(self, X, y=None):
         """
         Fit model to X and perform dimensionality reduction on X.
         y is currently ignored.
@@ -308,7 +314,6 @@ class TruncatedSVD(InteropMixin,
             self,
             X,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             order="F",
             ensure_min_samples=2,
             ensure_min_features=2,
@@ -395,8 +400,8 @@ class TruncatedSVD(InteropMixin,
                                        'type': 'dense',
                                        'description': 'X in original space',
                                        'shape': '(n_samples, n_features)'})
-    @mlfunc(preserve_index=True)
-    def inverse_transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_in")
+    def inverse_transform(self, X):
         """
         Transform X back to its original space.
         Returns X_original whose transform would be X.
@@ -407,7 +412,6 @@ class TruncatedSVD(InteropMixin,
         X = check_array(
             X,
             dtype=self.components_.dtype,
-            convert_dtype=convert_dtype,
             order="F",
         )
         if X.shape[1] != self.n_components:
@@ -458,8 +462,8 @@ class TruncatedSVD(InteropMixin,
                                        'type': 'dense',
                                        'description': 'Reduced version of X',
                                        'shape': '(n_samples, n_components)'})
-    @mlfunc(preserve_index=True)
-    def transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def transform(self, X):
         """
         Perform dimensionality reduction on X.
 
@@ -470,7 +474,6 @@ class TruncatedSVD(InteropMixin,
             self,
             X,
             dtype=self.components_.dtype,
-            convert_dtype=convert_dtype,
             order="F",
         )
 

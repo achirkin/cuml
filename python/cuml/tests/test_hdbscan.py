@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import importlib.metadata
@@ -43,6 +43,15 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 dataset_names = ["noisy_circles", "noisy_moons", "varied"]
+
+
+def test_hdbscan_rejects_singleton_clusters():
+    X = cp.arange(64, dtype=cp.float32).reshape(-1, 1)
+
+    with pytest.raises(
+        ValueError, match="min_cluster_size must be greater than one"
+    ):
+        HDBSCAN(min_samples=1, min_cluster_size=1).fit(X)
 
 
 def assert_cluster_counts(sk_agg, cuml_agg, digits=25):
@@ -217,6 +226,28 @@ def test_hdbscan_blobs(
         rtol=0.01,
         atol=0.01,
     )
+
+
+def test_hdbscan_fortran_contiguous_pandas_input():
+    X, _ = make_blobs(
+        n_samples=200,
+        n_features=8,
+        centers=3,
+        cluster_std=0.7,
+        random_state=42,
+    )
+    X_c = np.asarray(X, dtype=np.float32, order="C")
+    X_f = np.asarray(X, dtype=np.float32, order="F")
+    X_df = pd.DataFrame(X_f, columns=[f"x{i}" for i in range(X_f.shape[1])])
+    X_df_values = X_df.to_numpy(dtype=np.float32, copy=False)
+    assert X_df_values.flags.f_contiguous
+    assert not X_df_values.flags.c_contiguous
+
+    expected = HDBSCAN(min_cluster_size=10).fit_predict(X_c)
+    result = HDBSCAN(min_cluster_size=10).fit(X_df)
+
+    assert result._raw_data.array.flags.c_contiguous
+    assert adjusted_rand_score(expected, result.labels_) == 1.0
 
 
 @pytest.mark.parametrize("cluster_selection_epsilon", [0.0, 50.0, 150.0])
@@ -426,7 +457,7 @@ def test_hdbscan_cluster_patterns_extract_clusters(
 def test_hdbscan_core_dists_bug_4054():
     """
     This test explicitly verifies that the MRE from
-    https://github.com/rapidsai/cuml/issues/4054
+    https://github.com/NVIDIA/cuml/issues/4054
     matches the reference impl
     """
 

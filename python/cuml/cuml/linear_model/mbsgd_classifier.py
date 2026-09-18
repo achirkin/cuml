@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import cupy as cp
@@ -82,8 +82,7 @@ class MBSGDClassifier(
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -172,7 +171,7 @@ class MBSGDClassifier(
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y, *, convert_dtype="deprecated") -> "MBSGDClassifier":
+    def fit(self, X, y) -> "MBSGDClassifier":
         """
         Fit the model with X and y.
 
@@ -181,7 +180,6 @@ class MBSGDClassifier(
             self,
             X,
             y,
-            convert_dtype=convert_dtype,
             loss=self.loss,
             penalty=self.penalty,
             alpha=self.alpha,
@@ -211,12 +209,12 @@ class MBSGDClassifier(
         }
     )
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """
         Predicts the y for X.
 
         """
-        scores = self.decision_function(X, convert_dtype=convert_dtype)
+        scores = self.decision_function(X)
         thresh = 0 if self.loss == "hinge" else 0.5
         indices = (scores > thresh).view(cp.int8)
         return ClassLabels(indices, self.classes_)

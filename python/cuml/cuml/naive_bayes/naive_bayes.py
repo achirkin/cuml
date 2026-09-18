@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2020-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2020-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import cupy as cp
@@ -58,14 +58,13 @@ class _BaseNB(ClassifierMixin, SparseInputTagMixin, Base):
         """An optional transform to apply to X after it's been validated"""
         return X
 
-    def _check_predict(self, X, *, convert_dtype="deprecated"):
+    def _check_predict(self, X):
         """Validate and return X for predict."""
         X = check_inputs(
             self,
             X,
             dtype=self._supported_dtypes,
             sample_weight_dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             accept_sparse=["coo", "csr"],
             ensure_non_negative=self.__sklearn_tags__().input_tags.positive_only,
         )
@@ -79,7 +78,6 @@ class _BaseNB(ClassifierMixin, SparseInputTagMixin, Base):
         sample_weight=None,
         *,
         reset=False,
-        convert_dtype="deprecated",
     ):
         """Validate and return (X, y, classes, sample_weight) for fit."""
         if reset:
@@ -99,7 +97,6 @@ class _BaseNB(ClassifierMixin, SparseInputTagMixin, Base):
             dtype=self._supported_dtypes,
             y_dtype=None,
             sample_weight_dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             accept_sparse=["coo", "csr"],
             ensure_non_negative=self.__sklearn_tags__().input_tags.positive_only,
             return_classes=(True if classes is None else classes),
@@ -147,14 +144,14 @@ class _BaseNB(ClassifierMixin, SparseInputTagMixin, Base):
         },
     )
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """
         Perform classification on an array of test vectors X.
 
         """
         check_is_fitted(self)
 
-        X = self._check_predict(X, convert_dtype=convert_dtype)
+        X = self._check_predict(X)
         jll = self._joint_log_likelihood(X)
         indices = cp.argmax(jll, axis=1)
         return ClassLabels(indices, self.classes_)
@@ -173,13 +170,13 @@ class _BaseNB(ClassifierMixin, SparseInputTagMixin, Base):
         },
     )
     @mlfunc(preserve_index=True)
-    def predict_log_proba(self, X, *, convert_dtype="deprecated"):
+    def predict_log_proba(self, X):
         """
         Return log-probability estimates for the test vector X.
 
         """
         check_is_fitted(self)
-        X = self._check_predict(X, convert_dtype=convert_dtype)
+        X = self._check_predict(X)
         jll = self._joint_log_likelihood(X)
 
         # normalize by P(X) = P(f_1, ..., f_n)
@@ -234,8 +231,7 @@ class GaussianNB(_BaseNB):
     var_smoothing : float, default=1e-9
         Portion of the largest variance of all features that is added to
         variances for calculation stability.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -304,7 +300,6 @@ class GaussianNB(_BaseNB):
         classes=None,
         sample_weight=None,
         reset=False,
-        convert_dtype="deprecated",
     ) -> "GaussianNB":
         classes, reset = self._check_classes(classes, reset)
         X, y, classes, sample_weight = self._check_fit(
@@ -313,7 +308,6 @@ class GaussianNB(_BaseNB):
             classes=classes,
             sample_weight=sample_weight,
             reset=reset,
-            convert_dtype=convert_dtype,
         )
 
         self.epsilon_ = self.var_smoothing * (
@@ -657,7 +651,6 @@ class _BaseDiscreteNB(_BaseNB):
         y,
         classes=None,
         reset=False,
-        convert_dtype="deprecated",
     ) -> "_BaseDiscreteNB":
         if self.alpha < 0:
             raise ValueError(f"Expected alpha >= 0, got {self.alpha}")
@@ -668,7 +661,6 @@ class _BaseDiscreteNB(_BaseNB):
             y,
             classes=classes,
             reset=reset,
-            convert_dtype=convert_dtype,
         )
 
         if reset:
@@ -820,8 +812,7 @@ class MultinomialNB(_BaseDiscreteNB):
     class_prior : array-like, size (n_classes) (default=None)
         Prior probabilities of the classes. If specified, the priors are
         not adjusted according to the data.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -916,8 +907,7 @@ class BernoulliNB(_BaseDiscreteNB):
     class_prior : array-like of shape (n_classes,), default=None
         Prior probabilities of the classes. If specified the priors are not
         adjusted according to the data.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -1053,8 +1043,7 @@ class ComplementNB(_BaseDiscreteNB):
         The default behavior mirrors the implementation found in Mahout and
         Weka, which do not follow the full algorithm described in Table 9 of
         the paper.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -1180,8 +1169,7 @@ class CategoricalNB(_BaseDiscreteNB):
     class_prior : array-like of shape (n_classes,), default=None
         Prior probabilities of the classes. If specified the priors are not
         adjusted according to the data.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See

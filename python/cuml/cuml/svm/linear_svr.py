@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import cupy as cp
@@ -54,8 +54,7 @@ class LinearSVR(InteropMixin, LinearPredictMixin, RegressorMixin, Base):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -200,16 +199,13 @@ class LinearSVR(InteropMixin, LinearPredictMixin, RegressorMixin, Base):
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(
-        self, X, y, sample_weight=None, *, convert_dtype="deprecated"
-    ) -> "LinearSVR":
+    def fit(self, X, y, sample_weight=None) -> "LinearSVR":
         """Fit the model according to the given training data."""
         coef, intercept, n_iter, _ = cuml.svm.linear.fit(
             self,
             X,
             y,
             sample_weight=sample_weight,
-            convert_dtype=convert_dtype,
             loss=self.loss,
             penalty=self.penalty,
             fit_intercept=self.fit_intercept,

@@ -5,9 +5,10 @@
 import warnings
 
 import cupy as cp
+import cupyx
 import numpy as np
 from cupy import linalg
-from cupyx import geterr, lapack, seterr
+from cupyx import lapack
 
 from cuml.common.doc_utils import generate_docstring
 from cuml.internals.base import Base
@@ -26,16 +27,14 @@ from cuml.metrics import pairwise_kernels
 # cholesky solve with fallback to least squares for singular problems
 def _safe_solve(K, y):
     try:
-        # we need to set the error mode of cupy to raise
-        # otherwise we silently get an array of NaNs
-        err_mode = geterr()["linalg"]
-        seterr(linalg="raise")
-        dual_coef = lapack.posv(K, y)
-        # Perform following check as a workaround for cusolver issue to be
-        # fixed in a future CUDA version
-        if cp.all(cp.isnan(dual_coef)):
-            raise np.linalg.LinAlgError
-        seterr(linalg=err_mode)
+        with cupyx.errstate(linalg="raise"):
+            # we need to set the error mode of cupy to raise
+            # otherwise we silently get an array of NaNs
+            dual_coef = lapack.posv(K, y)
+            # Perform following check as a workaround for cusolver issue to be
+            # fixed in a future CUDA version
+            if cp.all(cp.isnan(dual_coef)):
+                raise np.linalg.LinAlgError
     except np.linalg.LinAlgError:
         warnings.warn(
             "Singular matrix in solving dual problem. Using "
@@ -127,8 +126,7 @@ class KernelRidge(InteropMixin, RegressorMixin, Base):
     kernel_params : mapping of str to any, default=None
         Additional parameters (keyword arguments) for kernel function passed
         as callable object.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -286,15 +284,12 @@ class KernelRidge(InteropMixin, RegressorMixin, Base):
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(
-        self, X, y, sample_weight=None, *, convert_dtype="deprecated"
-    ) -> "KernelRidge":
+    def fit(self, X, y, sample_weight=None) -> "KernelRidge":
         X, y, index = check_inputs(
             self,
             X,
             y,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             accept_multi_output=True,
             return_index=True,
             reset=True,
@@ -305,9 +300,7 @@ class KernelRidge(InteropMixin, RegressorMixin, Base):
         # Unlike other solvers, we need to special-case scalar sample weights,
         # because K might be a pre-computed kernel.
         if not (np.isscalar(sample_weight) and np.isfinite(sample_weight)):
-            sample_weight = check_sample_weight(
-                sample_weight, dtype=X.dtype, convert_dtype=convert_dtype
-            )
+            sample_weight = check_sample_weight(sample_weight, dtype=X.dtype)
             check_consistent_length(X, y, sample_weight)
 
         K = self._get_kernel(X)
@@ -322,7 +315,7 @@ class KernelRidge(InteropMixin, RegressorMixin, Base):
         return self
 
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """
         Predict using the kernel ridge model.
 
@@ -340,11 +333,6 @@ class KernelRidge(InteropMixin, RegressorMixin, Base):
             Returns predicted values.
         """
         check_is_fitted(self)
-        X = check_inputs(
-            self,
-            X,
-            dtype=self.X_fit_.array.dtype,
-            convert_dtype=convert_dtype,
-        )
+        X = check_inputs(self, X, dtype=self.X_fit_.array.dtype)
         K = self._get_kernel(X, self.X_fit_.array).astype(X.dtype, copy=False)
         return cp.dot(K, self.dual_coef_)

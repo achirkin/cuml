@@ -3,11 +3,11 @@
 If you are interested in contributing to cuML, your contributions will fall
 into three categories:
 1. You want to report a bug, feature request, or documentation issue
-    - File an [issue](https://github.com/rapidsai/cuml/issues/new/choose)
+    - File an [issue](https://github.com/NVIDIA/cuml/issues/new/choose)
     describing what you encountered or what you want to see changed.
     - Please run and paste the output of the `cuml/print_env.sh` script while
     reporting a bug to gather and report relevant environment details.
-    - The RAPIDS team will evaluate the issues and triage them, scheduling
+    - The cuML team will evaluate the issues and triage them, scheduling
     them for a release. If you believe the issue needs priority attention
     comment on the issue to notify the team.
 2. You want to propose a new Feature and implement it
@@ -24,19 +24,19 @@ into three categories:
 
 ### Your first issue
 
-1. Read the project's [README.md](https://github.com/rapidsai/cuml/blob/main/README.md)
+1. Read the project's [README.md](https://github.com/NVIDIA/cuml/blob/main/README.md)
     to learn how to setup the development environment.
-2. Find an issue to work on. The best way is to look for the [good first issue](https://github.com/rapidsai/cuml/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
-    or [help wanted](https://github.com/rapidsai/cuml/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) labels
+2. Find an issue to work on. The best way is to look for the [good first issue](https://github.com/NVIDIA/cuml/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+    or [help wanted](https://github.com/NVIDIA/cuml/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) labels
 3. Comment on the issue saying you are going to work on it.
 4. Get familiar with the developer guide relevant for you:
-    * For C++ developers it is available here [DEVELOPER_GUIDE.md](wiki/cpp/DEVELOPER_GUIDE.md)
-    * For Python developers, a [Python DEVELOPER_GUIDE.md](wiki/python/DEVELOPER_GUIDE.md) is available as well.
+    * For Python developers, read the [Python Developer Guide](docs/source/developer_guide/python/development.md) and [Estimator Guide](docs/source/developer_guide/python/estimators.md).
+    * For C++ developers, read the [C++ and CUDA Developer Guide](docs/source/developer_guide/cpp/development.md).
 5. Code! Make sure to update unit tests!
-6. When done, [create your pull request](https://github.com/rapidsai/cuml/compare).
+6. When done, [create your pull request](https://github.com/NVIDIA/cuml/compare).
 7. Verify that CI passes all [status checks](https://help.github.com/articles/about-status-checks/), or fix if needed.
 8. Wait for other developers to review your code and update code as needed.
-9. Once reviewed and approved, a RAPIDS developer will merge your pull request.
+9. Once reviewed and approved, a cuML developer will merge your pull request.
 
 Remember, if you are unsure about anything, don't hesitate to comment on issues and ask for clarifications!
 
@@ -135,7 +135,7 @@ methods to run clang-tidy on your local machine: using Docker or Conda.
         docker run --rm --pull always \
             --mount type=bind,source="$(pwd)",target=/opt/repo --workdir /opt/repo \
             -e SCCACHE_S3_NO_CREDENTIALS=1 \
-            rapidsai/ci-conda:26.10-latest /opt/repo/ci/run_clang_tidy.sh
+            rapidsai/ci-conda:26.12-latest /opt/repo/ci/run_clang_tidy.sh
         ```
 
 
@@ -158,27 +158,22 @@ methods to run clang-tidy on your local machine: using Docker or Conda.
 
 ### Managing PR labels
 
-Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using Github labels). This is used to highlight changes that users should know about when upgrading.
+Each PR must be labeled according to whether it is a "breaking" or
+"non-breaking" change (using GitHub labels). This is used to highlight changes
+that users should know about when upgrading.
 
-For cuML, a "breaking" change is one that modifies the public, non-experimental, Python API in a
-non-backward-compatible way. The C++ API does not have an expectation of backward compatibility at this
-time, so changes to it are not typically considered breaking. Backward-compatible API changes to the Python
-API (such as adding a new keyword argument to a function) do not need to be labeled.
+For cuML, a "breaking" change is one that modifies the public,
+non-experimental, Python API in a non-backward-compatible way. The C++ API does
+not have an expectation of backward compatibility at this time, so changes to
+it are not typically considered breaking. Backward-compatible API changes to
+the Python API (such as adding a new keyword argument to a function) do not
+need to be labeled.
 
-Additional labels must be applied to indicate whether the change is a feature, improvement, bugfix, or documentation change. See the shared RAPIDS documentation for these labels: https://github.com/rapidsai/kb/issues/42.
+Additional labels must be applied to indicate whether the change is a feature,
+improvement, bugfix, or documentation change. See the [maintainer docs
+here](https://docs.nvidia.com/datascience/resources/label-checker/) for more
+information.
 
-### Seasoned developers
-
-Once you have gotten your feet wet and are more comfortable with the code, you
-can look at the prioritized issues of our next release in our [project boards](https://github.com/rapidsai/cuml/projects).
-
-> **Pro Tip:** Always look at the release board with the highest number for
-issues to work on. This is where RAPIDS developers also focus their efforts.
-
-Look at the unassigned issues, and find an issue you are comfortable with
-contributing to. Start with _Step 3_ from above, commenting on the issue to let
-others know you are working on it. If you have any questions related to the
-implementation of the issue, ask them in the issue instead of the PR.
 
 ### Branches and Versions
 
@@ -196,7 +191,7 @@ PRs should target `main` by default, except in the following situations:
 * changes target a soon-to-be-released version: `release/YY.MM`
 * hotfixes targeting critical issues: `hotfix/YY.MM.patch-version`
 
-For more details, see https://docs.rapids.ai/releases/process/
+For more details, see https://docs.nvidia.com/datascience/releases/process/
 
 ### Branch naming
 

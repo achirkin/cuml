@@ -28,18 +28,7 @@ __all__ = (
 )
 
 
-OUTPUT_TYPES = (
-    "input",
-    "numpy",
-    "cupy",
-    "cudf",
-    "pandas",
-    "numba",
-    "array",
-    "dataframe",
-    "series",
-    "df_obj",
-)
+OUTPUT_TYPES = ("input", "numpy", "cupy", "cudf", "pandas")
 
 
 def check_output_type(output_type: str) -> str:
@@ -260,7 +249,7 @@ def infer_output_type(array, array_like="numpy"):
 
     Returns
     -------
-    output_type : {"cupy", "numpy", "pandas", "cudf", "numba", "cuml", None}
+    output_type : {"cupy", "numpy", "pandas", "cudf", None}
         The inferred ``output_type``, or ``None`` if not an array-like input.
     """
     if isinstance(array, np.ndarray) or sp.issparse(array):
@@ -271,8 +260,6 @@ def infer_output_type(array, array_like="numpy"):
         return "cudf"
     elif isinstance(array, (pd.DataFrame, pd.Series, pd.Index)):
         return "pandas"
-    elif hasattr(array, "__cuda_ndarray__"):
-        return "numba"
     elif hasattr(array, "__cuda_array_interface__"):
         return "cupy"
 
@@ -344,7 +331,7 @@ class ClassLabels:
 
         Parameters
         ----------
-        output_type : {'cupy', 'numpy', 'cudf', 'pandas', 'numba'} or None
+        output_type : {'cupy', 'numpy', 'cudf', 'pandas'} or None
             The output type to convert to. If `None`, `cupy` will be used when
             possible, falling back to `cudf` if necessary.
         index : pandas.Index, cudf.Index, or None, default=None
@@ -430,20 +417,16 @@ class ClassLabels:
         # Coerce result to requested output_type
         if isinstance(out, cp.ndarray):
             return convert_arrays(out, output_type, index=index)
-        elif output_type in ("cudf", "df_obj"):
-            return out
-        elif output_type == "dataframe":
-            return out.to_frame() if isinstance(out, cudf.Series) else out
-        elif output_type == "series" and isinstance(out, cudf.Series):
+        elif output_type == "cudf":
             return out
         elif output_type == "pandas":
             if cudf.pandas.LOADED:
                 return cudf.pandas.as_proxy_object(out)
             return out.to_pandas()
-        elif output_type in ("numpy", "array"):
+        elif output_type == "numpy":
             # XXX: dtype coercion not needed for object, and when specified
             # cudf will sometimes coerce `None -> <NA>` erroneously.
-            # See https://github.com/rapidsai/cudf/issues/22419
+            # See https://github.com/NVIDIA/cudf/issues/22419
             # Better to leave unspecified in this case.
             return out.to_numpy(dtype=None if dtype == "object" else dtype)
         else:
@@ -464,14 +447,13 @@ def convert_arrays(
     Parameters
     ----------
     obj : object
-        The object to convert. Any cupy arrays, numpy arrays, cupyx sparse
-        matrices, scipy sparse matrices, or cuml-specific output types
-        (`ClassLabels`, `ArrayIndexPair`) will be converted to the specified
-        `output_type`. Some builtin collections (dict, list, tuple) are
-        traversed recursively to find array-likes. Other array-likes (pandas,
-        ...) will error as unsupported. Any other type is passed through
-        unchanged.
-    output_type : {'cupy', 'numpy', 'cudf', 'pandas', 'numba'}
+        The object to convert. Any cupy arrays, numpy arrays, cudf
+        Series/DataFrame, pandas Series/DataFrames, cupyx sparse matrices,
+        scipy sparse matrices, or cuml-specific output types (`ClassLabels`,
+        `ArrayIndexPair`) will be converted to the specified `output_type`.
+        Some builtin collections (dict, list, tuple) are traversed recursively
+        to find array-likes. Any other type is passed through unchanged.
+    output_type : {'cupy', 'numpy', 'cudf', 'pandas'}
         The output type to convert to.
     index : pandas.Index, cudf.Index, or None, default=None
         An optional index to attach to arrays when returning dataframe-like
@@ -494,6 +476,40 @@ def convert_arrays(
     if isinstance(obj, ClassLabels):
         return obj.to_output(output_type, index=index)
 
+    if isinstance(obj, (cudf.Series, cudf.DataFrame, pd.Series, pd.DataFrame)):
+        is_pandas = isinstance(obj, (pd.Series, pd.DataFrame))
+        if output_type == "numpy":
+            return obj.to_numpy()
+        elif output_type in ("cudf", "pandas"):
+            if index is not None:
+                if is_pandas and hasattr(index, "to_pandas"):
+                    index = index.to_pandas()
+                obj = obj.copy(deep=False)
+                obj.index = index
+            if is_pandas:
+                return (
+                    obj if output_type == "pandas" else cudf.from_pandas(obj)
+                )
+            else:
+                if output_type == "cudf":
+                    return obj
+                return (
+                    cudf.pandas.as_proxy_object(obj)
+                    if cudf.pandas.LOADED
+                    else obj.to_pandas()
+                )
+        else:
+            assert output_type in ("cuml", "cupy")
+            if not (
+                obj.dtype.kind in "iufb"
+                if isinstance(obj, (pd.Series, cudf.Series))
+                else all(dt.kind in "iufb" for dt in obj.dtypes)
+            ):
+                raise TypeError(
+                    f"{output_type=!r} doesn't support non-numeric dtypes"
+                )
+            return cp.asarray(obj.to_numpy()) if is_pandas else obj.to_cupy()
+
     if isinstance(obj, np.ndarray):
         if output_type == "numpy":
             return obj
@@ -513,36 +529,9 @@ def convert_arrays(
     if isinstance(obj, cp.ndarray):
         if output_type == "numpy":
             return obj.get(order="A")
-        elif output_type in (
-            "cudf",
-            "pandas",
-            "df_obj",
-            "dataframe",
-            "series",
-        ):
-            if output_type == "series":
-                if obj.ndim == 2:
-                    if obj.shape[1] == 1:
-                        obj = obj.flatten()
-                    else:
-                        raise ValueError(
-                            "Only single dimensional arrays can be transformed to"
-                            " Series."
-                        )
-                elif obj.ndim == 0:
-                    obj = obj[None]
-            elif output_type == "dataframe":
-                if obj.ndim == 1:
-                    obj = obj[:, None]
-                elif obj.ndim == 0:
-                    obj = obj[None, None]
-
+        elif output_type in ("cudf", "pandas"):
             if obj.ndim == 2:
-                if (
-                    one_col_2d_as_series
-                    and obj.shape[1] == 1
-                    and output_type != "dataframe"
-                ):
+                if one_col_2d_as_series and obj.shape[1] == 1:
                     df = cudf.Series(obj.flatten(), index=index)
                 else:
                     df = cudf.DataFrame(obj, index=index)
@@ -554,13 +543,8 @@ def convert_arrays(
                     return cudf.pandas.as_proxy_object(df)
                 return df.to_pandas()
             return df
-
-        elif output_type == "numba":
-            from numba import cuda
-
-            return cuda.as_cuda_array(obj)
         else:
-            assert output_type in ("cuml", "cupy", "array")
+            assert output_type in ("cuml", "cupy")
             # Return `cupy` directly
             return obj
 
@@ -579,17 +563,6 @@ def convert_arrays(
         else:
             # Use coo for coo and all other formats
             return cp_sp.coo_matrix(obj)
-
-    elif isinstance(
-        obj, (cudf.Series, cudf.DataFrame, pd.Series, pd.DataFrame)
-    ):
-        raise TypeError(
-            f"Cannot return objects of type {type(obj).__name__} directly "
-            f"from an `mlfunc`-decorated function. Please return a "
-            f"`cupy.ndarray`, `numpy.ndarray`, `cupyx.scipy.sparse.spmatrix`, "
-            f"`scipy.sparse.spmatrix`, `ArrayIndexPair`, "
-            f"or `ClassLabels` instead."
-        )
 
     elif isinstance(obj, list):
         return [
@@ -724,6 +697,7 @@ def mlfunc(
     convert_output=True,
     set_input_type=False,
     preserve_index=False,
+    column_names=None,
 ):
     """A decorator for enabling common `cuml` machinery on a function/method.
 
@@ -780,6 +754,11 @@ def mlfunc(
         Whether to preserve the index of the ``array_arg`` argument (if any)
         in the function output. This should typically be set to ``True`` on
         any inference (predict/transform-like) methods.
+    column_names : {"feature_names_in", "feature_names_out", None}, default=None
+        Where to get the column names from when outputting a DataFrame. Options
+        are ``None`` (for default column names), ``"feature_names_in"`` (to
+        use ``model.feature_names_in_``) or ``"feature_names_out"`` (to
+        determine feature names from ``get_feature_names_out``.
     """
     if func is None:
         return lambda func: mlfunc(
@@ -789,9 +768,20 @@ def mlfunc(
             convert_output=convert_output,
             preserve_index=preserve_index,
             set_input_type=set_input_type,
+            column_names=column_names,
         )
 
     sig = inspect.signature(func, follow_wrapped=True)
+
+    # XXX: For legacy reasons, cuml will coerce a 1 column 2D output to a
+    # Series instead of a DataFrame when outputting pandas/cudf types. In the
+    # long run we want to deprecate and remove this (See #7893). However, many
+    # methods in sklearn have a defined expectation of whether they return a 1D
+    # or 2D output. For example, `transform` must always return a 2D output,
+    # coercing to a Series breaks the sklearn interface and makes it harder for
+    # sklearn to mix with cuml transformers. For now we restrict this legacy
+    # coercion to only `predict` methods.
+    one_col_2d_as_series = func.__name__.startswith(("predict", "fit_predict"))
 
     # Normalize model_arg to str | None
     if model_arg is ...:
@@ -820,6 +810,13 @@ def mlfunc(
     if preserve_index and array_arg is None:
         raise ValueError(
             "`preserve_index=True` is not valid with `array_arg=None`"
+        )
+
+    if column_names not in ("feature_names_in", "feature_names_out", None):
+        raise ValueError(f"`{column_names=}` is not valid")
+    elif column_names is not None and model_arg is None:
+        raise ValueError(
+            f"`{column_names=}` is not valid with `model_arg=None`"
         )
 
     @functools.wraps(func)
@@ -871,7 +868,26 @@ def mlfunc(
                     res,
                     output_type,
                     index=index,
+                    one_col_2d_as_series=one_col_2d_as_series,
                 )
+
+                if isinstance(res, (cudf.DataFrame, pd.DataFrame)):
+                    if column_names == "feature_names_in":
+                        cols = getattr(model, "feature_names_in_", None)
+                    elif column_names == "feature_names_out":
+                        try:
+                            cols = model.get_feature_names_out()
+                        except AttributeError:
+                            # Can happen if no `get_feature_names_out` method
+                            # exists, or in meta-estimators (like
+                            # ColumnTransformer) where the sub-estimator
+                            # doesn't support `get_feature_names_out`.
+                            cols = None
+                    else:
+                        cols = None
+
+                    if cols is not None:
+                        res.columns = cols
 
         return res
 

@@ -68,20 +68,20 @@ class ExponentialSmoothing(Base):
     `statsmodels.holtwinters.ExponentialSmoothing` model. Noticeably, it lacks:
 
     * predict : no support for in-sample prediction.
-        * https://github.com/rapidsai/cuml/issues/875
+        * https://github.com/NVIDIA/cuml/issues/875
 
     * hessian : no support for returning Hessian matrix.
-        * https://github.com/rapidsai/cuml/issues/880
+        * https://github.com/NVIDIA/cuml/issues/880
 
     * information : no support for returning Fisher matrix.
-        * https://github.com/rapidsai/cuml/issues/880
+        * https://github.com/NVIDIA/cuml/issues/880
 
     * loglike : no support for returning Log-likelihood.
-        * https://github.com/rapidsai/cuml/issues/880
+        * https://github.com/NVIDIA/cuml/issues/880
 
     Additionally, be warned that there may exist floating point instability
     issues in this model. Small values in endog may lead to faulty results.
-    See https://github.com/rapidsai/cuml/issues/888 for more information.
+    See https://github.com/NVIDIA/cuml/issues/888 for more information.
 
     *Known Differences:* This version of ExponentialSmoothing differs from
     statsmodels in some other minor ways:
@@ -90,7 +90,7 @@ class ExponentialSmoothing(Base):
     * this version can take additional parameters `eps`,
       `start_periods`, and `ts_num`
     * Score returns SSE rather than gradient logL
-      https://github.com/rapidsai/cuml/issues/876
+      https://github.com/NVIDIA/cuml/issues/876
     * This version provides get_level(), get_trend(), get_season()
 
     Examples
@@ -145,8 +145,7 @@ class ExponentialSmoothing(Base):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -434,7 +433,7 @@ class ExponentialSmoothing(Base):
         Returns the score of the model.
 
         .. note:: Currently returns the SSE, rather than the gradient of the
-            LogLikelihood. https://github.com/rapidsai/cuml/issues/876
+            LogLikelihood. https://github.com/NVIDIA/cuml/issues/876
 
         Parameters
         ----------

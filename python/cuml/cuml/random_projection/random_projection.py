@@ -3,6 +3,7 @@
 import cupy as cp
 import cupyx.scipy.sparse as sp
 import numpy as np
+from sklearn.base import ClassNamePrefixFeaturesOutMixin
 
 from cuml.common.doc_utils import generate_docstring
 from cuml.internals.base import Base
@@ -45,7 +46,11 @@ def johnson_lindenstrauss_min_dim(n_samples, eps=0.1):
     )
 
 
-class _BaseRandomProjection(SparseInputTagMixin, Base):
+class _BaseRandomProjection(
+    SparseInputTagMixin,
+    ClassNamePrefixFeaturesOutMixin,
+    Base,
+):
     """Base class for RandomProjection estimators."""
 
     components_ = ReflectedAttr()
@@ -76,9 +81,14 @@ class _BaseRandomProjection(SparseInputTagMixin, Base):
     def _gen_random_matrix(self, n_components, n_features, dtype):
         raise NotImplementedError
 
+    @property
+    @mlfunc(convert_output=False)
+    def _n_features_out(self):
+        return self.components_.shape[0]
+
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y=None, *, convert_dtype="deprecated"):
+    def fit(self, X, y=None):
         """Generate a random projection matrix."""
         # Use `mem_type=None` & `order=None` to minimize copies or transfers. We
         # don't need to access the data here, just ensure it's valid and get
@@ -87,7 +97,6 @@ class _BaseRandomProjection(SparseInputTagMixin, Base):
             self,
             X,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             mem_type=None,
             order=None,
             accept_sparse=True,
@@ -121,15 +130,14 @@ class _BaseRandomProjection(SparseInputTagMixin, Base):
         return self
 
     @generate_docstring()
-    @mlfunc(preserve_index=True)
-    def transform(self, X, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def transform(self, X):
         """Project the data by taking the matrix product with the random matrix."""
         check_is_fitted(self)
         X = check_inputs(
             self,
             X,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             accept_sparse=("csr", "csc"),
             accept_large_sparse=True,
         )
@@ -151,12 +159,10 @@ class _BaseRandomProjection(SparseInputTagMixin, Base):
         return out
 
     @generate_docstring()
-    @mlfunc(preserve_index=True)
-    def fit_transform(self, X, y=None, *, convert_dtype="deprecated"):
+    @mlfunc(preserve_index=True, column_names="feature_names_out")
+    def fit_transform(self, X, y=None):
         """Fit to data, then transform it."""
-        return self.fit(X, convert_dtype=convert_dtype).transform(
-            X, convert_dtype=convert_dtype
-        )
+        return self.fit(X).transform(X)
 
 
 class GaussianRandomProjection(_BaseRandomProjection):
@@ -190,8 +196,7 @@ class GaussianRandomProjection(_BaseRandomProjection):
         Controls the pseudo random number generator used to generate the
         projection matrix at fit time.
 
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -296,8 +301,7 @@ class SparseRandomProjection(_BaseRandomProjection):
         Controls the pseudo random number generator used to generate the
         projection matrix at fit time.
 
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See

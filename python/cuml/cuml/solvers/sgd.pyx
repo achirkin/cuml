@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2018-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2018-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 import cupy as cp
 import numpy as np
@@ -101,7 +101,6 @@ def fit_sgd(
     X,
     y,
     *,
-    convert_dtype="deprecated",
     return_classes=False,
     loss="squared_loss",
     penalty=None,
@@ -174,7 +173,6 @@ def fit_sgd(
         X,
         y,
         dtype=("float32", "float64"),
-        convert_dtype=convert_dtype,
         order="F",
         return_classes=return_classes,
         reset=True,
@@ -339,8 +337,7 @@ class SGD(FMajorInputTagMixin, Base):
         The old learning rate is generally divide by 5
     n_iter_no_change : int (default = 5)
         The number of epochs to train without any improvement in the model
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -407,7 +404,7 @@ class SGD(FMajorInputTagMixin, Base):
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y, *, convert_dtype="deprecated") -> "SGD":
+    def fit(self, X, y) -> "SGD":
         """
         Fit the model with X and y.
 
@@ -416,7 +413,6 @@ class SGD(FMajorInputTagMixin, Base):
             self,
             X,
             y,
-            convert_dtype=convert_dtype,
             loss=self.loss,
             penalty=self.penalty,
             alpha=self.alpha,
@@ -444,7 +440,7 @@ class SGD(FMajorInputTagMixin, Base):
         }
     )
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """
         Predicts the y for X.
 
@@ -455,7 +451,6 @@ class SGD(FMajorInputTagMixin, Base):
             self,
             X,
             dtype=self.coef_.dtype,
-            convert_dtype=convert_dtype,
             order="F",
         )
 

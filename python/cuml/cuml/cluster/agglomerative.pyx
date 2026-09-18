@@ -81,8 +81,7 @@ class AgglomerativeClustering(ClusterMixin, CMajorInputTagMixin, Base):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -137,7 +136,7 @@ class AgglomerativeClustering(ClusterMixin, CMajorInputTagMixin, Base):
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(self, X, y=None, *, convert_dtype="deprecated") -> "AgglomerativeClustering":
+    def fit(self, X, y=None) -> "AgglomerativeClustering":
         """
         Fit the hierarchical clustering from features.
         """
@@ -147,7 +146,6 @@ class AgglomerativeClustering(ClusterMixin, CMajorInputTagMixin, Base):
             X,
             order="C",
             dtype="float32",
-            convert_dtype=convert_dtype,
             ensure_min_samples=2,
             reset=True,
         )

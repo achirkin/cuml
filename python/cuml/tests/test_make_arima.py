@@ -21,7 +21,6 @@ output_type = [
     (None, 100),  # Default is cupy if None is used
     ("numpy", 100),
     ("cupy", 100000),
-    ("numba", 100000),
     ("cudf", 100),
 ]
 

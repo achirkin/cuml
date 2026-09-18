@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2020-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2020-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 import scipy
 import sklearn
+import sklearn.datasets
+from packaging.version import Version
 from sklearn.impute import MissingIndicator as skMissingIndicator
 from sklearn.impute import SimpleImputer as skSimpleImputer
 from sklearn.preprocessing import Binarizer as skBinarizer
@@ -71,6 +73,8 @@ from cuml.testing.test_preproc_utils import (  # noqa: F401
     sparse_int_dataset,
     sparse_nan_filled_positive,
 )
+
+SKLEARN_VERSION = Version(sklearn.__version__)
 
 
 @pytest.mark.parametrize("feature_range", [(0, 1), (0.1, 0.8)])
@@ -178,7 +182,7 @@ def test_standard_scaler_sparse(
 @pytest.mark.parametrize("with_std", [True, False])
 # The numerical warning is triggered when centering or scaling
 # cannot be done as single steps. Its display can be safely disabled.
-# For more information see : https://github.com/rapidsai/cuml/issues/4203
+# For more information see : https://github.com/NVIDIA/cuml/issues/4203
 @pytest.mark.filterwarnings("ignore:Numerical issues::")
 def test_scale(
     failure_logger,
@@ -467,7 +471,7 @@ def test_poly_features(
     )
     t_X = polyfeatures.fit_transform(X)
     assert type(X) is type(t_X)
-    cu_feature_names = polyfeatures.get_feature_names()
+    cu_feature_names = polyfeatures.get_feature_names_out()
 
     if isinstance(t_X, np.ndarray):
         if order == "C":
@@ -482,12 +486,19 @@ def test_poly_features(
         include_bias=include_bias,
     )
     sk_t_X = polyfeatures.fit_transform(X_np)
-    if sklearn.__version__ <= "1.0":
-        sk_feature_names = polyfeatures.get_feature_names()
+    sk_feature_names = polyfeatures.get_feature_names_out()
 
     assert_allclose(t_X, sk_t_X, rtol=0.1, atol=0.1)
-    if sklearn.__version__ <= "1.0":
-        assert sk_feature_names == cu_feature_names
+    np.testing.assert_array_equal(cu_feature_names, sk_feature_names)
+
+
+def test_poly_features_get_feature_names_deprecated():
+    X = np.array([[1.5, 2.5, 3.5], [1.6, 2.4, 3.7]])
+    model = cuPolynomialFeatures().fit(X)
+    with pytest.warns(FutureWarning, match="get_feature_names"):
+        res = model.get_feature_names()
+
+    np.testing.assert_array_equal(res, model.get_feature_names_out())
 
 
 @pytest.mark.parametrize("degree", [2, 3])
@@ -787,22 +798,8 @@ def test_robust_scale_sparse(
 @pytest.mark.parametrize(
     "strategy",
     [
-        pytest.param(
-            "uniform",
-            marks=pytest.mark.xfail(
-                strict=False,
-                reason="Intermittent mismatch with sklearn"
-                " (https://github.com/rapidsai/cuml/issues/3481)",
-            ),
-        ),
-        pytest.param(
-            "quantile",
-            marks=pytest.mark.xfail(
-                strict=False,
-                reason="Intermittent mismatch with sklearn"
-                " (https://github.com/rapidsai/cuml/issues/2933)",
-            ),
-        ),
+        "uniform",
+        "quantile",
         "kmeans",
     ],
 )
@@ -825,6 +822,12 @@ def test_kbinsdiscretizer(
         assert type(t_X) is type(X)
         assert type(r_X) is type(t_X)
 
+    sklearn_kwargs = {}
+    if strategy == "quantile" and SKLEARN_VERSION >= Version("1.7"):
+        # cuML uses linear percentile interpolation. Scikit-learn exposed the
+        # method in 1.7 and changed its default in 1.9.
+        sklearn_kwargs["quantile_method"] = "linear"
+
     transformer = skKBinsDiscretizer(
         n_bins=n_bins,
         encode=encode,
@@ -833,6 +836,7 @@ def test_kbinsdiscretizer(
         subsample=200_000
         if strategy in ("uniform", "quantile", "kmeans")
         else None,
+        **sklearn_kwargs,
     )
     sk_t_X = transformer.fit_transform(X_np)
     sk_r_X = transformer.inverse_transform(sk_t_X)
@@ -842,6 +846,42 @@ def test_kbinsdiscretizer(
     else:
         assert_allclose(t_X, sk_t_X)
         assert_allclose(r_X, sk_r_X)
+
+
+@pytest.mark.parametrize(
+    "X_fit,X_transform,n_bins",
+    [
+        pytest.param(
+            [0.0, 1.0],
+            [0.499999],
+            2,
+            id="value-below-bin-edge",
+        ),
+        # These float32 values put X_transform between edges produced when
+        # CuPy receives a NumPy integer or a Python integer for ``num``.
+        pytest.param(
+            [-11.525976, 9.953962],
+            [1.3619866],
+            20,
+            id="float32-linspace-num-promotion",
+        ),
+    ],
+)
+def test_kbinsdiscretizer_uniform_edge_parity(X_fit, X_transform, n_bins):
+    X_fit = np.asarray(X_fit, dtype=np.float32)[:, None]
+    X_transform = np.asarray(X_transform, dtype=np.float32)[:, None]
+
+    cu_transformer = cuKBinsDiscretizer(
+        n_bins=n_bins, encode="ordinal", strategy="uniform"
+    ).fit(cp.asarray(X_fit))
+    sk_transformer = skKBinsDiscretizer(
+        n_bins=n_bins, encode="ordinal", strategy="uniform"
+    ).fit(X_fit)
+
+    assert_allclose(
+        cu_transformer.transform(cp.asarray(X_transform)),
+        sk_transformer.transform(X_transform),
+    )
 
 
 @pytest.mark.parametrize("missing_values", [0, 1, np.nan])
@@ -1021,7 +1061,23 @@ def test_quantile_transformer(
 
 @pytest.mark.parametrize("n_quantiles", [30, 100])
 @pytest.mark.parametrize("output_distribution", ["uniform", "normal"])
-@pytest.mark.parametrize("ignore_implicit_zeros", [False, True])
+@pytest.mark.parametrize(
+    "ignore_implicit_zeros",
+    [
+        False,
+        pytest.param(
+            True,
+            marks=pytest.mark.xfail(
+                SKLEARN_VERSION < Version("1.9.1"),
+                reason=(
+                    "sklearn bug in sparse quantiles with ignore_implicit_zeros "
+                    "in sklearn <= 1.9.0"
+                ),
+                strict=True,
+            ),
+        ),
+    ],
+)
 @pytest.mark.parametrize("subsample", [100])
 def test_quantile_transformer_sparse(
     failure_logger,
@@ -1074,6 +1130,36 @@ def test_quantile_transformer_sparse(
 
     assert_allclose(t_X, sk_t_X)
     assert_allclose(r_X, sk_r_X)
+
+
+def test_quantile_transformer_sparse_subsampling_ignore_implicit_zeros():
+    subsample = 500
+    kws = dict(subsample=subsample, n_quantiles=50, random_state=42)
+
+    # A very sparse X matrix with two similar columns.
+    # One with nnz `subsample - 1`, the other with nnz `subsample + 1`
+    row = cp.arange(subsample * 2)
+    col = cp.asarray([0, 1]).repeat([subsample - 1, subsample + 1])
+    data = cp.concatenate(
+        (
+            cp.linspace(1, 2, num=subsample - 1),
+            cp.linspace(1, 2, num=subsample + 1),
+        )
+    )
+    X = cpx.scipy.sparse.csc_array(
+        (data, (row, col)),
+        shape=(2 * subsample**2, 2),
+    )
+
+    qt = cuQuantileTransformer(ignore_implicit_zeros=True, **kws).fit(X)
+    quantiles = qt.quantiles_.T
+    assert (qt.quantiles_ > 0).all()
+    assert not cp.all(quantiles[1] == quantiles[1][0])
+
+    # if ignore_implicit_zeros=False, quantiles are mostly zeros
+    qt = cuQuantileTransformer(ignore_implicit_zeros=False, **kws).fit(X)
+    quantiles = qt.fit(X).quantiles_
+    assert cp.isclose(quantiles, 0).mean() > 0.9
 
 
 @pytest.mark.filterwarnings(
@@ -1235,3 +1321,83 @@ def test__repr__():
     assert cuRobustScaler().__repr__() == "RobustScaler()"
     assert cuSimpleImputer().__repr__() == "SimpleImputer()"
     assert cuStandardScaler().__repr__() == "StandardScaler()"
+
+
+@pytest.mark.parametrize(
+    "cu_cls, sk_cls, params",
+    [
+        (cuMinMaxScaler, skMinMaxScaler, {}),
+        (cuMaxAbsScaler, skMaxAbsScaler, {}),
+        (cuRobustScaler, skRobustScaler, {}),
+        (cuStandardScaler, skStandardScaler, {}),
+        (cuQuantileTransformer, skQuantileTransformer, {"n_quantiles": 10}),
+        (cuPowerTransformer, skPowerTransformer, {}),
+        (cuNormalizer, skNormalizer, {}),
+        (cuBinarizer, skBinarizer, {}),
+    ],
+)
+def test_get_feature_names_out(cu_cls, sk_cls, params):
+    iris = sklearn.datasets.load_iris()
+    cu_model = cu_cls(**params).fit(iris.data)
+    sk_model = sk_cls(**params).fit(iris.data)
+
+    res = cu_model.get_feature_names_out()
+    sol = sk_model.get_feature_names_out()
+    np.testing.assert_array_equal(res, sol)
+
+    res = cu_model.get_feature_names_out(iris.feature_names)
+    sol = sk_model.get_feature_names_out(iris.feature_names)
+    np.testing.assert_array_equal(res, sol)
+
+
+def test_kernel_centerer_get_feature_names_out():
+    from sklearn.metrics.pairwise import linear_kernel
+
+    rng = np.random.RandomState(0)
+    X = rng.random_sample((6, 4))
+    X_pairwise = linear_kernel(X)
+
+    cu_model = cuKernelCenterer().fit(X_pairwise)
+    sk_model = skKernelCenterer().fit(X_pairwise)
+    res = cu_model.get_feature_names_out()
+    sol = sk_model.get_feature_names_out()
+    np.testing.assert_array_equal(res, sol)
+
+
+@pytest.mark.parametrize(
+    "encode",
+    [
+        "onehot",
+        "onehot-dense",
+        "ordinal",
+    ],
+)
+def test_kbins_discretizer_get_feature_names_out(encode):
+    X = np.array([[-2, 1, -4], [-1, 2, -3], [0, 3, -2], [1, 4, -1]])
+
+    cu_model = cuKBinsDiscretizer(n_bins=4, encode=encode).fit(X)
+    sk_model = skKBinsDiscretizer(n_bins=4, encode=encode).fit(X)
+    res = cu_model.get_feature_names_out()
+    sol = sk_model.get_feature_names_out()
+    np.testing.assert_array_equal(res, sol)
+
+
+@pytest.mark.parametrize("names", [None, ["a", "b"]])
+def test_missing_indicator_get_feature_names_out(names):
+    X = np.array([[np.nan, 1], [0, 1], [1, np.nan]])
+    cu_model = cuMissingIndicator().fit(X)
+    sk_model = skMissingIndicator().fit(X)
+    res = cu_model.get_feature_names_out(names)
+    sol = sk_model.get_feature_names_out(names)
+    np.testing.assert_array_equal(res, sol)
+
+
+@pytest.mark.parametrize("names", [None, ["a", "b"]])
+@pytest.mark.parametrize("add_indicator", [False, True])
+def test_simple_imputer_get_feature_names_out(add_indicator, names):
+    X = np.array([[np.nan, 1], [0, 1], [1, np.nan]])
+    cu_model = cuSimpleImputer(add_indicator=add_indicator).fit(X)
+    sk_model = skSimpleImputer(add_indicator=add_indicator).fit(X)
+    res = cu_model.get_feature_names_out(names)
+    sol = sk_model.get_feature_names_out(names)
+    np.testing.assert_array_equal(res, sol)

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import numbers
@@ -61,8 +61,7 @@ class LinearSVC(InteropMixin, LinearClassifierMixin, ClassifierMixin, Base):
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -222,9 +221,7 @@ class LinearSVC(InteropMixin, LinearClassifierMixin, ClassifierMixin, Base):
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(
-        self, X, y, sample_weight=None, *, convert_dtype="deprecated"
-    ) -> "LinearSVC":
+    def fit(self, X, y, sample_weight=None) -> "LinearSVC":
         """Fit the model according to the given training data."""
         n_streams = self.n_streams
         if isinstance(n_streams, bool) or not isinstance(
@@ -244,7 +241,6 @@ class LinearSVC(InteropMixin, LinearClassifierMixin, ClassifierMixin, Base):
             X,
             y,
             sample_weight,
-            convert_dtype=convert_dtype,
             is_classifier=True,
             n_streams=n_streams,
             class_weight=self.class_weight,
@@ -275,9 +271,9 @@ class LinearSVC(InteropMixin, LinearClassifierMixin, ClassifierMixin, Base):
         },
     )
     @mlfunc(preserve_index=True)
-    def predict(self, X, *, convert_dtype="deprecated"):
+    def predict(self, X):
         """Predict class labels for samples in X."""
-        scores = self.decision_function(X, convert_dtype=convert_dtype)
+        scores = self.decision_function(X)
         if scores.ndim == 1:
             indices = (scores >= 0).view(cp.int8)
         else:

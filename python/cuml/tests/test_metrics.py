@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 import platform
@@ -58,7 +58,6 @@ from cuml.metrics import (
     pairwise_distances,
     precision_recall_curve,
     roc_auc_score,
-    sparse_pairwise_distances,
 )
 from cuml.metrics.cluster import adjusted_rand_score as cu_ars
 from cuml.metrics.cluster import entropy
@@ -346,14 +345,14 @@ def test_adjusted_rand_score_small(nrows):
 @pytest.mark.skipif(
     IS_ARM,
     reason="Test fails unexpectedly on ARM. "
-    "github.com/rapidsai/cuml/issues/5025",
+    "https://github.com/NVIDIA/cuml/issues/5025",
 )
 def test_silhouette_score_batched(metric, chunk_divider, labeled_clusters):
     X, labels = labeled_clusters
     if metric == "l1":
         pytest.xfail(
             "Batched l1 silhouette score is unstable; "
-            "see https://github.com/rapidsai/cuml/issues/8145"
+            "see https://github.com/NVIDIA/cuml/issues/8145"
         )
 
     cuml_score = cu_silhouette_score(
@@ -391,7 +390,6 @@ def test_silhouette_samples_batched(metric, chunk_divider, labeled_clusters):
         assert False
 
 
-@pytest.mark.xfail
 def test_silhouette_score_batched_non_monotonic():
     vecs = np.array(
         [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [10.0, 10.0, 10.0]]
@@ -1104,7 +1102,7 @@ def test_roc_auc_score_at_limits():
 
 @pytest.mark.skip(
     reason="shape discrepancy with sklearn 1.2"
-    "https://github.com/rapidsai/cuml/issues/5164"
+    "https://github.com/NVIDIA/cuml/issues/5164"
 )
 def test_precision_recall_curve():
     y_true = np.array([0, 0, 1, 1])
@@ -1142,7 +1140,7 @@ def test_precision_recall_curve_at_limits():
 
 @pytest.mark.skip(
     reason="shape discrepancy with sklearn 1.2"
-    "https://github.com/rapidsai/cuml/issues/5164"
+    "https://github.com/NVIDIA/cuml/issues/5164"
 )
 @pytest.mark.parametrize("n_samples", [50, 500000])
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
@@ -1251,14 +1249,6 @@ def prep_dense_array(array, metric, col_major=0):
         return np.asfortranarray(norm_array) if col_major else norm_array
     else:
         return np.asfortranarray(array) if col_major else array
-
-
-def test_sparse_pairwise_distances_deprecated():
-    X = cp_sp.random(10, 10, random_state=42, density=0.5)
-    with pytest.warns(FutureWarning, match="deprecated"):
-        res = sparse_pairwise_distances(X, metric="sqeuclidean")
-    sol = sklearn_pairwise_distances(X.toarray().get(), metric="sqeuclidean")
-    np.testing.assert_allclose(res.get(), sol, atol=1e-4)
 
 
 @pytest.mark.filterwarnings(
@@ -1552,20 +1542,6 @@ def test_pairwise_distances_warns_bool_conversion(metric, kind):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         pairwise_distances(X_bool_like, metric=metric)
-
-
-def test_pairwise_distances_metric_arg_deprecated():
-    X = np.array([[1, 2], [3, 4]], dtype="float64")
-    sol = sklearn_pairwise_distances(X, metric="minkowski", p=1)
-    with pytest.warns(FutureWarning, match="deprecated"):
-        res = pairwise_distances(X, metric="minkowski", metric_arg=1)
-    np.testing.assert_allclose(sol, res)
-
-    # edge case - check that nan_euclidean warns, but still runs
-    with pytest.warns(FutureWarning, match="deprecated"):
-        res = pairwise_distances(X, metric="nan_euclidean", metric_arg=1)
-    sol = sklearn_pairwise_distances(X, metric="nan_euclidean")
-    np.testing.assert_allclose(sol, res)
 
 
 def test_pairwise_distances_metric_kwds():

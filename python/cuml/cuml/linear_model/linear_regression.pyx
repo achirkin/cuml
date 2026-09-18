@@ -116,8 +116,7 @@ class LinearRegression(InteropMixin,
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used. See
@@ -151,7 +150,7 @@ class LinearRegression(InteropMixin,
     :class:`sklearn.linear_model.LinearRegression`.
 
     For an additional example see `the OLS notebook
-    <https://github.com/rapidsai/cuml/blob/main/notebooks/linear_regression_demo.ipynb>`__.
+    <https://github.com/NVIDIA/cuml/blob/main/notebooks/linear_regression_demo.ipynb>`__.
 
     Examples
     --------
@@ -315,14 +314,7 @@ class LinearRegression(InteropMixin,
 
     @generate_docstring()
     @mlfunc(set_input_type=True)
-    def fit(
-        self,
-        X,
-        y,
-        sample_weight=None,
-        *,
-        convert_dtype="deprecated",
-    ) -> "LinearRegression":
+    def fit(self, X, y, sample_weight=None) -> "LinearRegression":
         """
         Fit the model with X and y.
 
@@ -334,7 +326,6 @@ class LinearRegression(InteropMixin,
             y,
             sample_weight,
             dtype=("float32", "float64"),
-            convert_dtype=convert_dtype,
             ensure_min_samples=2,
             accept_sparse=True,
             accept_large_sparse=True,

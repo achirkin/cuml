@@ -103,8 +103,7 @@ class SpectralClustering(InteropMixin,
     verbose : int or boolean, default=False
         Sets logging level. It must be one of `cuml.common.logger.level_*`.
         See :ref:`verbosity-levels` for more info.
-    output_type : {'input', 'array', 'dataframe', 'series', 'df_obj', \
-        'numba', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
+    output_type : {None, 'input', 'cupy', 'numpy', 'cudf', 'pandas'}, default=None
         Return results and set estimator attributes to the indicated output
         type. If None, the output type set at the module level
         (`cuml.global_settings.output_type`) will be used.
@@ -133,7 +132,7 @@ class SpectralClustering(InteropMixin,
     Notes
     -----
     The eigensolver uses the Lanczos approach from the raft implementation
-    https://docs.rapids.ai/api/raft/stable/pylibraft_api/sparse/#pylibraft.sparse.linalg.eigsh.
+    https://docs.nvidia.com/raft/latest/pylibraft_api/sparse/#pylibraft.sparse.linalg.eigsh.
 
     Kmeans is used for assigning labels.
 
